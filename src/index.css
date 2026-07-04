@@ -1,0 +1,272 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@source "./**/*.{ts,tsx}";
+
+@custom-variant dark (&:is(.dark *));
+
+:root {
+  color-scheme: light;
+  --radius: 0;
+  --app-chrome-height: 36px;
+  --background: #f5f5f5;
+  --foreground: #333333;
+  --card: #ffffff;
+  --card-foreground: #333333;
+  --popover: #ffffff;
+  --popover-foreground: #333333;
+  --primary: #1a1a1a;
+  --primary-foreground: #ffffff;
+  --secondary: #ebebeb;
+  --secondary-foreground: #333333;
+  --muted: #e8e8e8;
+  --muted-foreground: #6e6e6e;
+  --accent: rgba(0, 0, 0, 0.04);
+  --accent-foreground: #1a1a1a;
+  --destructive: #e51400;
+  --border: rgba(0, 0, 0, 0.1);
+  --input: #ffffff;
+  --ring: rgba(0, 0, 0, 0.18);
+  --sidebar: #f5f5f5;
+  --sidebar-foreground: #333333;
+  --ask: #107c10;
+  --scheme: #c45c00;
+  --delegate: #ea580c;
+  --warning: #bf8803;
+  --success: #107c10;
+  --glass-blur: 0px;
+}
+
+.dark {
+  color-scheme: dark;
+  --background: rgba(24, 24, 24, 0.88);
+  --foreground: #d4d4d4;
+  --card: rgba(31, 31, 31, 0.86);
+  --card-foreground: #d4d4d4;
+  --popover: rgba(37, 37, 38, 0.92);
+  --popover-foreground: #d4d4d4;
+  --primary: #e8e8e8;
+  --primary-foreground: #1a1a1a;
+  --secondary: rgba(42, 42, 42, 0.88);
+  --secondary-foreground: #cccccc;
+  --muted: rgba(37, 37, 38, 0.84);
+  --muted-foreground: #8a8a8a;
+  --accent: rgba(255, 255, 255, 0.06);
+  --accent-foreground: #e4e4e4;
+  --destructive: #f14c4c;
+  --border: rgba(255, 255, 255, 0.1);
+  --input: rgba(255, 255, 255, 0.38);
+  --ring: rgba(255, 255, 255, 0.18);
+  --sidebar: rgba(20, 20, 20, 0.86);
+  --sidebar-foreground: #cccccc;
+  --ask: #89d185;
+  --scheme: #e8a54b;
+  --delegate: #fb923c;
+  --warning: #cca700;
+  --success: #89d185;
+  --glass-blur: 52px;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-ask: var(--ask);
+  --color-scheme: var(--scheme);
+  --color-delegate: var(--delegate);
+  --color-warning: var(--warning);
+  --color-success: var(--success);
+
+  --radius-sm: 0;
+  --radius-md: 0;
+  --radius-lg: 0;
+  --radius-xl: 0;
+
+  --font-sans: "SF Pro Text", "Inter", "PingFang SC", "Helvetica Neue", system-ui, sans-serif;
+  --font-mono: "SF Mono", "JetBrains Mono", "Menlo", monospace;
+
+  --animate-fade-in: fade-in 0.2s ease;
+}
+
+html[data-platform="darwin"] {
+  /* Keep in sync with trafficLightPosition in electron/main.ts */
+  --mac-traffic-light-x: 14px;
+  --mac-traffic-light-y: 12px;
+  --mac-traffic-light-button-size: 12px;
+  --mac-traffic-light-spacing: 8px;
+  --mac-titlebar-control-gap: 14px;
+  --mac-traffic-light-cluster-width: calc(
+    3 * var(--mac-traffic-light-button-size) + 2 * var(--mac-traffic-light-spacing)
+  );
+  --mac-traffic-light-width: calc(
+    var(--mac-traffic-light-x) + var(--mac-traffic-light-cluster-width) + var(--mac-titlebar-control-gap)
+  );
+  --app-chrome-height: 40px;
+}
+
+@utility app-region-drag {
+  -webkit-app-region: drag;
+}
+
+@utility app-region-no-drag {
+  -webkit-app-region: no-drag;
+}
+
+@utility mac-traffic-light-pad {
+  html[data-platform="darwin"] & {
+    padding-inline-start: var(--mac-traffic-light-width);
+  }
+}
+
+@utility surface-sidebar {
+  background-color: var(--sidebar);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+}
+
+@utility surface-elevated {
+  background-color: var(--card);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+}
+
+@utility surface-glass-header {
+  background-color: var(--background);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+}
+
+@utility surface-glass {
+  background-color: var(--background);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+}
+
+* {
+  border-color: var(--color-border);
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+  background: transparent;
+}
+
+body {
+  font-family: var(--font-sans);
+  color: var(--foreground);
+  font-size: 13px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.bg-background,
+.bg-card,
+.bg-popover,
+.bg-secondary,
+.bg-muted {
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+::selection {
+  background: color-mix(in srgb, var(--foreground) 15%, transparent);
+  color: var(--foreground);
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(2px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes send-icon-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.22);
+  }
+}
+
+.message-loading-dots {
+  font-size: 13px;
+  letter-spacing: 0.12em;
+}
+
+.message-loading-dots span {
+  animation: loading-dot 1.2s ease-in-out infinite;
+}
+
+.message-loading-dots span:nth-child(2) {
+  animation-delay: 0.15s;
+}
+
+.message-loading-dots span:nth-child(3) {
+  animation-delay: 0.3s;
+}
+
+@keyframes loading-dot {
+  0%,
+  60%,
+  100% {
+    opacity: 0.2;
+  }
+  30% {
+    opacity: 1;
+  }
+}
+
+.animate-send-icon-pulse {
+  animation: send-icon-pulse 1.45s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+*:focus,
+*:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
