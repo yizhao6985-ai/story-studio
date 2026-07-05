@@ -1,0 +1,26 @@
+appId: studio.story.app
+productName: Story Studio
+copyright: Copyright © 2026 Story Studio
+
+directories:
+  output: release
+  buildResources: build
+
+files:
+  - dist/**/*
+  - dist-electron/**/*
+  - package.json
+
+mac:
+  category: public.app-category.productivity
+  target:
+    - dmg
+    - zip
+
+win:
+  target:
+    - nsis
+
+linux:
+  target:
+    - AppImage

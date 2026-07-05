@@ -1,0 +1,20 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "jsx": "react-jsx",
+    "strict": true,
+    "skipLibCheck": true,
+    "noEmit": true,
+    "isolatedModules": true,
+    "paths": {
+      "@/*": ["./src/*"],
+      "@story-studio/shared": ["../../packages/shared/src/index.ts"],
+      "@story-studio/shared/*": ["../../packages/shared/src/*"],
+      "@story-studio/workspace-fs": ["../../packages/workspace-fs/src/index.ts"]
+    }
+  },
+  "include": ["src/**/*", "electron/**/*"]
+}

@@ -1,0 +1,22 @@
+{
+  "name": "@story-studio/shared",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check-types": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^24.12.4",
+    "typescript": "^5.9.3"
+  },
+  "exports": {
+    ".": "./src/index.ts",
+    "./activity": "./src/activity.ts",
+    "./agent-types": "./src/agent-types.ts",
+    "./story": "./src/story-types.ts",
+    "./paths": "./src/paths.ts",
+    "./llm-errors": "./src/llm-errors.ts",
+    "./mastra-headers": "./src/mastra-headers.ts"
+  }
+}
