@@ -1,6 +1,8 @@
 import {
   ArrowLeft,
   ArrowLeftRight,
+  ChevronsLeft,
+  ListTree,
   PanelLeftClose,
   PanelLeftOpen,
   PanelRightClose,
@@ -70,7 +72,7 @@ export function FileTreePanelToggle({
   collapsed: boolean;
   onClick: () => void;
 }) {
-  const Icon = collapsed ? PanelLeftOpen : PanelLeftClose;
+  const Icon = collapsed ? ListTree : ChevronsLeft;
 
   return (
     <button
@@ -226,7 +228,7 @@ export function AppPanelHeader({
       ) : null}
       <div
         className={cn(
-          "app-region-no-drag flex min-w-0 items-center overflow-hidden",
+          "flex min-w-0 items-center overflow-hidden",
           inset === "flush" ? "shrink-0" : "min-w-0 flex-1",
           !showLeading && (inset === "flush" ? "pl-0" : "pl-4"),
         )}

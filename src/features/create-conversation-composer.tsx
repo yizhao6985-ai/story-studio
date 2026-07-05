@@ -119,7 +119,7 @@ export function CreateConversationComposer({
         className,
       )}
     >
-      <div className="w-full max-w-[720px] space-y-4">
+      <div className="w-full max-w-[800px] space-y-4">
         <div className="text-center">
           <h3 className="mb-2 text-[15px] font-medium text-foreground">开始一段新对话</h3>
           <p className="text-xs leading-relaxed text-muted-foreground">

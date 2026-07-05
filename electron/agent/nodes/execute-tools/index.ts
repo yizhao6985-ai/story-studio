@@ -6,6 +6,7 @@ import { createWorkspaceTools } from "#agent/tools/workspace.js";
 import {
   validateToolCall,
 } from "#agent/shared/work-loop/tool-gate.js";
+import { resolveToolName } from "#agent/shared/tooling.js";
 import { errorObservation } from "#agent/shared/work-loop/tool-error.js";
 
 import { getLastAiMessage } from "../utils.js";
@@ -27,6 +28,7 @@ export async function executeToolsNode(
   const toolMap = new Map(allTools.map((t) => [t.name, t]));
 
   const toolResults: Array<{
+    rawName: string;
     name: string;
     content: string;
     id: string;
@@ -34,17 +36,37 @@ export async function executeToolsNode(
   }> = [];
 
   for (const call of toolCalls) {
-    const name = call.name;
+    const rawName = call.name;
     const args = (call.args ?? {}) as Record<string, unknown>;
+    const toolCallId = call.id ?? rawName;
+
+    const resolved = resolveToolName(rawName);
+    if (resolved.kind === "rejected") {
+      toolResults.push({
+        rawName,
+        name: rawName,
+        id: toolCallId,
+        args,
+        content: errorObservation(
+          rawName,
+          resolved.code,
+          resolved.message,
+          resolved.hint,
+        ),
+      });
+      continue;
+    }
+
+    const name = resolved.name;
     const gate = validateToolCall(name, args, workLoop, state.mode);
-    const toolCallId = call.id ?? name;
 
     if (!gate.allowed) {
       toolResults.push({
+        rawName,
         name,
         id: toolCallId,
         args,
-        content: errorObservation(name, gate.code, gate.message),
+        content: errorObservation(rawName, gate.code, gate.message),
       });
       continue;
     }
@@ -52,10 +74,11 @@ export async function executeToolsNode(
     const tool = toolMap.get(name);
     if (!tool) {
       toolResults.push({
-        name,
+        rawName,
+        name: rawName,
         id: toolCallId,
         args,
-        content: errorObservation(name, "UNKNOWN_TOOL", `未知工具 ${name}`),
+        content: errorObservation(rawName, "UNKNOWN_TOOL", `未知工具 ${rawName}`),
       });
       continue;
     }
@@ -63,6 +86,7 @@ export async function executeToolsNode(
     try {
       const content = await tool.invoke(args);
       toolResults.push({
+        rawName,
         name,
         id: toolCallId,
         args,
@@ -71,10 +95,11 @@ export async function executeToolsNode(
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       toolResults.push({
+        rawName,
         name,
         id: toolCallId,
         args,
-        content: errorObservation(name, "TOOL_ERROR", message),
+        content: errorObservation(rawName, "TOOL_ERROR", message),
       });
     }
   }
@@ -105,7 +130,7 @@ export async function executeToolsNode(
       new ToolMessage({
         content: r.content,
         tool_call_id: r.id,
-        name: r.name,
+        name: r.rawName,
       }),
   );
 

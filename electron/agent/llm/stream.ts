@@ -11,6 +11,7 @@ import { pushMessage } from "@langchain/langgraph";
 import { nanoid } from "nanoid";
 
 import { sanitizeMessagesForTextChat } from "#agent/messages/prepare.js";
+import { messageContentToText } from "#agent/messages/content.js";
 import { LLM_TIMEOUT_MS, withLlmRetry } from "./timeout.js";
 
 /** 关闭 LLM callback 自动 messages 流，改由 pushMessage 推增量 chunk。 */
@@ -25,7 +26,13 @@ type StreamChatOptions = {
   additionalKwargs?: Record<string, unknown>;
   /** 文本增量回调（用于 synthesize 回复流式展示） */
   onTextDelta?: (delta: string) => void;
+  /** 是否 pushMessage 写入 graph state；synthesize 应关闭，避免 chunk 污染 checkpoint */
+  pushToGraph?: boolean;
 };
+
+function chunkTextDelta(chunk: AIMessageChunk): string {
+  return messageContentToText(chunk.content);
+}
 
 function withNoStreamTags(config: RunnableConfig): RunnableConfig {
   const tags = [...new Set([...(config.tags ?? []), ...NOSTREAM_TAGS])];
@@ -73,6 +80,7 @@ export async function streamChat(
 ): Promise<AIMessage> {
   const presetMessageId = options?.messageId;
   const additionalKwargs = options?.additionalKwargs;
+  const pushToGraph = options?.pushToGraph !== false;
   const messages = sanitizeMessagesForTextChat(input);
   const attemptState = { hadStreamDelta: false };
 
@@ -93,10 +101,13 @@ export async function streamChat(
         messageId = id;
         if (hasStreamDelta(chunk)) {
           attemptState.hadStreamDelta = true;
-          if (options?.onTextDelta && typeof chunk.content === "string" && chunk.content) {
-            options.onTextDelta(chunk.content);
+          const delta = chunkTextDelta(chunk);
+          if (delta && options?.onTextDelta) {
+            options.onTextDelta(delta);
           }
-          pushMessage(chunkToAIMessage(chunk, id, additionalKwargs), config);
+          if (pushToGraph) {
+            pushMessage(chunkToAIMessage(chunk, id, additionalKwargs), config);
+          }
         }
       }
 

@@ -21,6 +21,8 @@ function stageForTool(toolName: string): ActivityStage {
     case TOOL_NAMES.patch:
     case TOOL_NAMES.write:
     case TOOL_NAMES.create:
+    case TOOL_NAMES.delete:
+    case TOOL_NAMES.rename:
       return "act";
     case "auto_verify":
       return "verify";
@@ -66,26 +68,43 @@ export function buildActivityLabel(
       };
     case TOOL_NAMES.read:
       return {
-        label: path ? `读取 ${path}` : "读取文件",
+        label: "读取",
         detail: summary,
         path,
       };
     case TOOL_NAMES.pin:
       return {
-        label: path ? `定位 ${path}` : "定位写入目标",
+        label: "定位写入目标",
         detail:
           typeof args.action === "string" ? String(args.action) : summary,
         path,
       };
     case TOOL_NAMES.patch:
-      return { label: path ? `局部修改 ${path}` : "局部修改", detail: summary, path };
+      return { label: "局部修改", detail: summary, path };
     case TOOL_NAMES.write:
-      return { label: path ? `覆盖写入 ${path}` : "覆盖写入", detail: summary, path };
+      return { label: "覆盖写入", detail: summary, path };
     case TOOL_NAMES.create:
-      return { label: path ? `新建 ${path}` : "新建文件", detail: summary, path };
+      return { label: "新建文件", detail: summary, path };
+    case TOOL_NAMES.delete:
+      return { label: "删除", detail: summary, path };
+    case TOOL_NAMES.rename: {
+      const fromPath =
+        typeof args.fromPath === "string" ? args.fromPath : undefined;
+      const toPath =
+        typeof args.toPath === "string"
+          ? args.toPath
+          : typeof data?.toPath === "string"
+            ? data.toPath
+            : undefined;
+      return {
+        label: "重命名",
+        detail: fromPath && toPath ? `${fromPath} → ${toPath}` : summary,
+        path: toPath,
+      };
+    }
     case "auto_verify":
       return {
-        label: path ? `验证 ${path}` : "验证写入",
+        label: "验证写入",
         detail: ok ? "通过" : summary,
         path: typeof data?.path === "string" ? data.path : path,
       };

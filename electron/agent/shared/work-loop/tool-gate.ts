@@ -1,39 +1,15 @@
 import type { AgentMode } from "../../../../src/lib/story/types.js";
 import type { WorkLoopState } from "./types.js";
+import { resolveToolName } from "#agent/shared/tooling.js";
+import { TOOL_NAMES, toolsForMode } from "./tool-names.js";
 
-export const TOOL_NAMES = {
-  explore: "explore_workspace",
-  glob: "glob_workspace",
-  grep: "grep_workspace",
-  read: "read_workspace_file",
-  pin: "pin_write_target",
-  patch: "patch_workspace_file",
-  write: "write_workspace_file",
-  create: "create_workspace_file",
-} as const;
-
-export type ToolName = (typeof TOOL_NAMES)[keyof typeof TOOL_NAMES];
-
-const READ_TOOLS: ToolName[] = [
-  TOOL_NAMES.explore,
-  TOOL_NAMES.glob,
-  TOOL_NAMES.grep,
-  TOOL_NAMES.read,
-];
-
-const WRITE_TOOLS: ToolName[] = [
-  TOOL_NAMES.pin,
-  TOOL_NAMES.patch,
-  TOOL_NAMES.write,
-  TOOL_NAMES.create,
-];
-
-export function toolsForMode(mode: AgentMode): ToolName[] {
-  if (mode === "normal") {
-    return [...READ_TOOLS, ...WRITE_TOOLS];
-  }
-  return READ_TOOLS;
-}
+export {
+  ALL_KNOWN_TOOLS,
+  isKnownTool,
+  TOOL_NAMES,
+  toolsForMode,
+  type ToolName,
+} from "./tool-names.js";
 
 type GateResult =
   | { allowed: true }
@@ -45,8 +21,21 @@ export function validateToolCall(
   workLoop: WorkLoopState,
   mode: AgentMode,
 ): GateResult {
+  const resolved = resolveToolName(toolName);
+  if (resolved.kind === "rejected") {
+    return {
+      allowed: false,
+      code: resolved.code,
+      message: resolved.hint
+        ? `${resolved.message}。${resolved.hint}`
+        : resolved.message,
+    };
+  }
+
+  toolName = resolved.name;
+
   const allowedNames = toolsForMode(mode);
-  if (!allowedNames.includes(toolName as ToolName)) {
+  if (!allowedNames.includes(toolName)) {
     return {
       allowed: false,
       code: "MODE_BLOCKED",
@@ -96,6 +85,66 @@ export function validateToolCall(
         allowed: false,
         code: "NOT_PINNED",
         message: `新建前须先 pin_write_target 定位 ${path}`,
+      };
+    }
+  }
+
+  if (toolName === TOOL_NAMES.delete) {
+    if (!path) {
+      return { allowed: false, code: "MISSING_PATH", message: "缺少 path" };
+    }
+
+    const pinned = workLoop.pinnedTargets.find(
+      (p) => p.path === path && p.action === "delete",
+    );
+    if (!pinned) {
+      return {
+        allowed: false,
+        code: "NOT_PINNED",
+        message: `删除前须先 pin_write_target 定位 ${path}（action=delete）`,
+      };
+    }
+
+    if (!workLoop.readCache[path] && !workLoop.visitedPaths.includes(path)) {
+      return {
+        allowed: false,
+        code: "NOT_READ_YET",
+        message: `删除前须先 read_workspace_file 或 explore 确认 ${path}`,
+      };
+    }
+  }
+
+  if (toolName === TOOL_NAMES.rename) {
+    const fromPath =
+      typeof args.fromPath === "string" ? args.fromPath : undefined;
+    const toPath = typeof args.toPath === "string" ? args.toPath : undefined;
+    if (!fromPath || !toPath) {
+      return {
+        allowed: false,
+        code: "MISSING_PATH",
+        message: "缺少 fromPath 或 toPath",
+      };
+    }
+
+    const pinned = workLoop.pinnedTargets.find(
+      (p) => p.path === fromPath && p.action === "rename",
+    );
+    if (!pinned) {
+      return {
+        allowed: false,
+        code: "NOT_PINNED",
+        message: `重命名前须先 pin_write_target 定位 ${fromPath}（action=rename）`,
+      };
+    }
+
+    if (
+      !workLoop.readCache[fromPath] &&
+      !workLoop.visitedPaths.includes(fromPath)
+    ) {
+      return {
+        allowed: false,
+        code: "NOT_READ_YET",
+        message: `重命名前须先 read_workspace_file 或 explore 确认 ${fromPath}`,
       };
     }
   }

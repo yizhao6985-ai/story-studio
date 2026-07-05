@@ -4,11 +4,13 @@ import { z } from "zod";
 
 import {
   createWorkWorkspaceFile,
+  deleteWorkWorkspaceEntry,
   exploreWorkWorkspace,
   globWorkWorkspace,
   grepWorkWorkspace,
   patchWorkWorkspaceFile,
   readWorkWorkspaceFile,
+  renameWorkWorkspaceEntry,
   writeWorkWorkspaceFile,
 } from "../../library/index.js";
 
@@ -131,10 +133,10 @@ export function createWorkspaceTools(workPath: string): StructuredToolInterface[
       {
         name: TOOL_NAMES.pin,
         description:
-          "写入前定位目标：登记将要修改或新建的文件路径。overwrite/patch 须先 read；create 用于新文件。",
+          "写入前定位目标：登记将要修改、新建、重命名或删除的路径。overwrite/patch/delete/rename 须先 read 源路径；create 用于新文件。",
         schema: z.object({
-          path: z.string().describe("相对作品根目录的路径"),
-          action: z.enum(["patch", "overwrite", "create"]),
+          path: z.string().describe("相对作品根目录的路径（rename 时为原路径 fromPath）"),
+          action: z.enum(["patch", "overwrite", "create", "delete", "rename"]),
           reason: z.string().optional().describe("为何选此路径"),
         }),
       },
@@ -218,6 +220,49 @@ export function createWorkspaceTools(workPath: string): StructuredToolInterface[
         schema: z.object({
           path: z.string(),
           content: z.string().optional(),
+        }),
+      },
+    ),
+    tool(
+      async (input) => {
+        await deleteWorkWorkspaceEntry(workPath, input.path);
+        return JSON.stringify({
+          ok: true,
+          tool: TOOL_NAMES.delete,
+          summary: `deleted ${input.path}`,
+          data: { path: input.path },
+        });
+      },
+      {
+        name: TOOL_NAMES.delete,
+        description:
+          "删除作品内文件或空目录（须先 pin action=delete，且已 read 或 explore 确认路径）",
+        schema: z.object({
+          path: z.string().describe("相对作品根目录的路径"),
+        }),
+      },
+    ),
+    tool(
+      async (input) => {
+        await renameWorkWorkspaceEntry(
+          workPath,
+          input.fromPath,
+          input.toPath,
+        );
+        return JSON.stringify({
+          ok: true,
+          tool: TOOL_NAMES.rename,
+          summary: `renamed ${input.fromPath} → ${input.toPath}`,
+          data: { fromPath: input.fromPath, toPath: input.toPath },
+        });
+      },
+      {
+        name: TOOL_NAMES.rename,
+        description:
+          "重命名或移动文件/目录（须先 pin action=rename 定位 fromPath，且已 read 或 explore 确认原路径）",
+        schema: z.object({
+          fromPath: z.string().describe("原相对路径"),
+          toPath: z.string().describe("新相对路径"),
         }),
       },
     ),

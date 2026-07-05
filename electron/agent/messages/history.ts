@@ -59,6 +59,12 @@ function pickVisibleAssistantMessage(messages: unknown[]): HistoryChatMessage | 
   return null;
 }
 
+/** 从 checkpoint 消息中提取用户可见的 assistant 回复文本。 */
+export function pickVisibleAssistantReply(messages: unknown[]): string {
+  const visible = pickVisibleAssistantMessage(messages);
+  return visible?.text?.trim() || "（无回复）";
+}
+
 /** 将 checkpoint 消息转为 UI 历史：每轮用户消息对应一条 assistant 回复。 */
 export function messagesToChatHistory(messages: unknown[]): HistoryChatMessage[] {
   const result: HistoryChatMessage[] = [];

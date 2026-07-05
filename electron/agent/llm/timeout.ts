@@ -1,4 +1,6 @@
 /** Agent ↔ LLM 集中超时与重试（超时 abort 后最多再试 1 次）。 */
+import { classifyLlmError } from "../../../src/lib/llm-errors.js";
+
 export const LLM_TIMEOUT_MS = {
   chat: 120_000,
   structured: 180_000,
@@ -67,6 +69,11 @@ function throwLlmTimeout(
   throw new LlmTimeoutError(timeoutMs, attempts, { cause });
 }
 
+function isRetryableNonTimeoutError(error: unknown): boolean {
+  const kind = classifyLlmError(error).kind;
+  return kind === "content_policy" || kind === "parse";
+}
+
 export async function withLlmRetry<T>(opts: {
   parentSignal?: AbortSignal;
   timeoutMs: number;
@@ -104,6 +111,14 @@ export async function withLlmRetry<T>(opts: {
       }
 
       if (!isTimeoutLike(deadline, error)) {
+        if (
+          isRetryableNonTimeoutError(error) &&
+          attempt < maxAttempts - 1 &&
+          (!opts.canRetry || opts.canRetry())
+        ) {
+          lastError = error;
+          continue;
+        }
         throw error;
       }
 

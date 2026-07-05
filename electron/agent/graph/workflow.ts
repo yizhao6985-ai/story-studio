@@ -44,6 +44,7 @@ const workflow = new StateGraph(AgentState)
     "synthesize",
     "escalate",
     "advanceSubtask",
+    "think",
   ])
   .addConditionalEdges("executeTools", routeAfterExecute, [
     "think",

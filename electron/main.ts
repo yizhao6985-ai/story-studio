@@ -3,12 +3,9 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import {
-  confirmSchemeChanges,
   createWorkWorkspaceDirectory,
   createWorkWorkspaceFile,
   deleteWorkWorkspaceEntry,
-  discardSchemeChanges,
-  getWorkDiff,
   initWorkspaceAtPath,
   isWorkspace,
   listWorkFileTree,
@@ -253,21 +250,6 @@ function registerIpcHandlers() {
 
   ipcMain.handle("agent:getContextUsage", async (_e, input) => {
     return getAgentContextUsage(input as Parameters<typeof getAgentContextUsage>[0]);
-  });
-
-  // --- Library: 方案（Scheme）变更 ---
-  ipcMain.handle("library:getDiff", async (_e, workPath: string) => {
-    return getWorkDiff(workPath);
-  });
-
-  ipcMain.handle("library:confirmScheme", async (_e, workPath: string) => {
-    await confirmSchemeChanges(workPath);
-    return loadWork(workPath);
-  });
-
-  ipcMain.handle("library:discardScheme", async (_e, workPath: string) => {
-    await discardSchemeChanges(workPath);
-    return loadWork(workPath);
   });
 
   // --- Library: 作品文件树 ---

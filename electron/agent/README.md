@@ -2,6 +2,8 @@
 
 LangGraph work-loop：`prepareTurn → compactContext → routeTurn → planTasks → think ↔ executeTools → synthesize`
 
+`think` 在子任务未完成且无 tool call 时会有限次自循环（最多 2 次）；`planTasks` 默认合并为 1 个子任务。
+
 无作品任务时（`routeTurn` 判定为 direct）：`prepareTurn → compactContext → routeTurn → synthesize`
 
 ## 目录结构
@@ -47,11 +49,11 @@ agent/
 prepareTurn    # 重置 workLoop / turnRoute，不预读目录
 compactContext # 上下文超阈值时压缩较早对话
 routeTurn      # 判断是否需要作品工作循环；否 → 直出 synthesize
-planTasks      # 外层任务规划（拆 subtasks，无 tool）
-think          # 针对当前子任务，决定 tool
+planTasks      # 外层任务规划（默认 1 条 subtask；读+写+整合合并）
+think          # 针对当前子任务决定 tool；非法 tool 名在节点内过滤/别名映射
 executeTools   # 探索 / 读 / 写 + 自动 verify
-advanceSubtask # Ask 多任务时切换子任务
-synthesize     # 最终用户可见回复
+advanceSubtask # 多子任务且当前项已有活动时切换下一项
+synthesize     # 独立上下文生成用户可见汇总（不复述用户原话）
 ```
 
 ## 阶段与动作
@@ -59,7 +61,7 @@ synthesize     # 最终用户可见回复
 - **探索**：`explore_workspace`（含浏览根目录 path=""）、`glob`、`grep`
 - **读取**：`read_workspace_file`
 - **定位**：`pin_write_target`（Normal）
-- **写入**：`patch` / `write` / `create`（Normal）
+- **写入**：`patch` / `write` / `create` / `delete` / `rename_workspace_entry`（Normal）
 - **验证**：write 后 runtime 自动 read-back
 
 ## 对话历史

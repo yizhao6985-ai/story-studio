@@ -2,9 +2,8 @@ import { readFile } from "node:fs/promises";
 
 import {
   hashWorkspaceContent,
-  readWorkWorkspaceFile,
 } from "../../../library/index.js";
-import { resolveWorkspaceFilePath } from "../../../library/workspace/paths.js";
+import { isTextFile, resolveWorkspaceFilePath } from "../../../library/workspace/paths.js";
 
 import {
   activityFromToolResult,
@@ -119,6 +118,43 @@ export async function applyPostToolUpdates(
         break;
       }
 
+      case TOOL_NAMES.delete: {
+        if (ok && parsed?.data && typeof parsed.data === "object") {
+          const data = parsed.data as { path?: string };
+          if (data.path) {
+            delete loop.readCache[data.path];
+            loop.visitedPaths = loop.visitedPaths.filter((p) => p !== data.path);
+            loop.pinnedTargets = loop.pinnedTargets.filter(
+              (p) => p.path !== data.path,
+            );
+            loop = completeCurrentSubtaskAfterVerify(loop, data.path);
+          }
+        }
+        break;
+      }
+
+      case TOOL_NAMES.rename: {
+        if (ok && parsed?.data && typeof parsed.data === "object") {
+          const data = parsed.data as { fromPath?: string; toPath?: string };
+          if (data.fromPath && data.toPath) {
+            const cached = loop.readCache[data.fromPath];
+            if (cached) {
+              loop.readCache[data.toPath] = cached;
+              delete loop.readCache[data.fromPath];
+            }
+            loop.visitedPaths = [
+              ...loop.visitedPaths.filter((p) => p !== data.fromPath),
+              data.toPath,
+            ];
+            loop.pinnedTargets = loop.pinnedTargets.filter(
+              (p) => p.path !== data.fromPath,
+            );
+            loop = completeCurrentSubtaskAfterVerify(loop, data.toPath);
+          }
+        }
+        break;
+      }
+
       default:
         break;
     }
@@ -146,44 +182,16 @@ async function runAutoVerify(
   message: { tool: string; content: string; args?: Record<string, unknown> };
 }> {
   let loop = { ...workLoop };
+  const verifySubtaskId = loop.currentSubtaskId;
 
   try {
     const absPath = resolveWorkspaceFilePath(workPath, path);
-    const full = await readFile(absPath, "utf8");
-    const meta = await readWorkWorkspaceFile(workPath, path, {
-      startLine: 1,
-      endLine: 1,
-    });
-
-    if (!meta.readable) {
-      loop.verifyAttempts += 1;
-      if (loop.verifyAttempts > loop.maxVerifyRetries) {
-        loop.escalateReason = `写入验证失败：${path}`;
-      }
-      const payload = {
-        ok: false,
-        tool: "auto_verify",
-        summary: `verify failed for ${path}`,
-        code: "VERIFY_FAIL",
-        data: { path },
-      };
-      loop = appendActivity(loop, {
-        subtaskId: loop.currentSubtaskId,
-        stage: "verify",
-        action: "auto_verify",
-        ...buildActivityLabel("auto_verify", { path }, payload),
-        status: "error",
-      });
-      return {
-        workLoop: loop,
-        message: {
-          tool: "auto_verify",
-          content: JSON.stringify(payload),
-          args: { path },
-        },
-      };
+    const name = path.split("/").pop() ?? path;
+    if (!isTextFile(name)) {
+      throw new Error("FILE_NOT_READABLE");
     }
 
+    const full = await readFile(absPath, "utf8");
     loop.readCache[path] = {
       hash: hashWorkspaceContent(full),
       excerpt: full.slice(0, 400),
@@ -203,7 +211,7 @@ async function runAutoVerify(
       data: { path, bytes: full.length, preview: full.slice(0, 300) },
     };
     loop = appendActivity(loop, {
-      subtaskId: loop.currentSubtaskId,
+      subtaskId: verifySubtaskId,
       stage: "verify",
       action: "auto_verify",
       ...buildActivityLabel("auto_verify", { path }, payload),
@@ -231,7 +239,7 @@ async function runAutoVerify(
       data: { path },
     };
     loop = appendActivity(loop, {
-      subtaskId: loop.currentSubtaskId,
+      subtaskId: verifySubtaskId,
       stage: "verify",
       action: "auto_verify",
       ...buildActivityLabel("auto_verify", { path }, payload),

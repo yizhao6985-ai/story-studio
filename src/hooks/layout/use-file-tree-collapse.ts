@@ -14,22 +14,42 @@ export function useFileTreePanelCollapse() {
   const filesGroupRef = useGroupRef();
   const fileTreePanelRef = usePanelRef();
   const savedLayoutRef = useRef<Record<string, number> | null>(null);
+  const programmaticCollapseRef = useRef(false);
 
   const [fileTreeCollapsed, setFileTreeCollapsed] = useState(false);
 
   const recordVisibleFilesLayout = useCallback((layout: Record<string, number>) => {
-    if (!isFileTreeCollapsed(layout)) {
-      savedLayoutRef.current = { ...layout };
+    if (isFileTreeCollapsed(layout)) {
+      if (programmaticCollapseRef.current) {
+        programmaticCollapseRef.current = false;
+        setFileTreeCollapsed(true);
+        return;
+      }
+
+      const group = filesGroupRef.current;
+      const panel = fileTreePanelRef.current;
+      const restore = savedLayoutRef.current ?? {
+        "file-tree": DEFAULT_WORKSPACE_FILES_LAYOUT["file-tree"],
+        editor: DEFAULT_WORKSPACE_FILES_LAYOUT.editor,
+      };
+      queueMicrotask(() => {
+        group?.setLayout(restore);
+        panel?.expand();
+      });
+      setFileTreeCollapsed(false);
+      return;
     }
-    setFileTreeCollapsed(isFileTreeCollapsed(layout));
-  }, []);
+
+    savedLayoutRef.current = { ...layout };
+    setFileTreeCollapsed(false);
+  }, [filesGroupRef, fileTreePanelRef]);
 
   const toggleFileTreePanel = useCallback(() => {
     const group = filesGroupRef.current;
+    const panel = fileTreePanelRef.current;
     if (!group) return;
 
-    const layout = group.getLayout();
-    const collapsed = isFileTreeCollapsed(layout);
+    const collapsed = panel?.isCollapsed() ?? isFileTreeCollapsed(group.getLayout());
 
     if (collapsed) {
       const restore = savedLayoutRef.current ?? {
@@ -37,28 +57,27 @@ export function useFileTreePanelCollapse() {
         editor: DEFAULT_WORKSPACE_FILES_LAYOUT.editor,
       };
       group.setLayout(restore);
-      fileTreePanelRef.current?.expand();
+      panel?.expand();
       setFileTreeCollapsed(false);
       return;
     }
 
-    savedLayoutRef.current = { ...layout };
+    savedLayoutRef.current = { ...group.getLayout() };
+    programmaticCollapseRef.current = true;
     group.setLayout({ ...COLLAPSED_WORKSPACE_FILES_LAYOUT });
-    fileTreePanelRef.current?.collapse();
+    panel?.collapse();
     setFileTreeCollapsed(true);
   }, [filesGroupRef, fileTreePanelRef]);
 
   const handleFileTreePanelResize = useCallback(
     (sizePct: number) => {
-      const collapsed = sizePct < 0.5;
-      setFileTreeCollapsed(collapsed);
+      if (sizePct < 0.5) return;
 
-      if (!collapsed) {
-        const group = filesGroupRef.current;
-        if (group) {
-          savedLayoutRef.current = { ...group.getLayout() };
-        }
+      const group = filesGroupRef.current;
+      if (group) {
+        savedLayoutRef.current = { ...group.getLayout() };
       }
+      setFileTreeCollapsed(false);
     },
     [filesGroupRef],
   );

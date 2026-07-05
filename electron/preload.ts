@@ -51,13 +51,6 @@ contextBridge.exposeInMainWorld("storyStudio", {
         workPath,
         conversationId,
       ),
-    // 方案（Scheme）
-    getDiff: (workPath: string) =>
-      ipcRenderer.invoke("library:getDiff", workPath),
-    confirmScheme: (workPath: string) =>
-      ipcRenderer.invoke("library:confirmScheme", workPath),
-    discardScheme: (workPath: string) =>
-      ipcRenderer.invoke("library:discardScheme", workPath),
     // 作品文件树
     listWorkFileTree: (workPath: string) =>
       ipcRenderer.invoke("library:listWorkFileTree", workPath),
@@ -137,7 +130,7 @@ contextBridge.exposeInMainWorld("storyStudio", {
     getContextUsage: (input: {
       workPath: string;
       conversationId: string;
-      mode: "ask" | "normal" | "scheme";
+      mode: "ask" | "normal";
       draftMessage?: string;
     }) => ipcRenderer.invoke("agent:getContextUsage", input),
     startDelegate: (

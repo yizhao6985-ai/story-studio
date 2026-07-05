@@ -20,6 +20,7 @@ import {
 } from "@/features/app-chrome";
 import { CreateConversationComposer } from "@/features/create-conversation-composer";
 import { ConversationComposer } from "@/features/conversation-composer";
+import { LlmErrorAlert } from "@/features/llm-error-alert";
 import { AssistantTurnBubble } from "@/features/assistant-turn-bubble";
 import { CreateWorkspaceDialog } from "@/features/create-workspace-dialog";
 import { KeyboardShortcutsDialog } from "@/features/keyboard-shortcuts-dialog";
@@ -40,7 +41,7 @@ import {
 import { formatShortcut } from "@/lib/keyboard-shortcuts";
 import { cn } from "@/lib/utils";
 
-const CONVERSATION_CONTENT_CLASS = "mx-auto w-full max-w-[720px] px-6";
+const CONVERSATION_CONTENT_CLASS = "mx-auto w-full max-w-[800px] px-6";
 
 export function AppShell() {
   const state = useAppShellState();
@@ -70,7 +71,8 @@ export function AppShell() {
     composeDefaultWorkPath,
     createWorkspaceOpen,
     setCreateWorkspaceOpen,
-    composerError,
+    llmError,
+    appNotice,
     contextUsage,
     delegateSession,
     shortcutsOpen,
@@ -222,11 +224,12 @@ export function AppShell() {
               </button>
             </div>
           )}
-          {composerError && (
-            <div className="rounded-none border border-destructive/20 bg-destructive/5 px-3 py-1.5 text-xs text-destructive backdrop-blur-sm">
-              {composerError}
+          {llmError ? <LlmErrorAlert error={llmError} /> : null}
+          {appNotice ? (
+            <div className="rounded-none border border-warning/25 bg-warning/5 px-3 py-1.5 text-xs leading-relaxed text-warning backdrop-blur-sm">
+              {appNotice}
             </div>
-          )}
+          ) : null}
           <ConversationComposer
             value={input}
             onChange={setInput}

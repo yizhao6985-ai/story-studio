@@ -1,6 +1,4 @@
-export type AgentMode = "ask" | "normal" | "scheme";
-
-export type SchemePhase = "drafting" | "executing";
+export type AgentMode = "ask" | "normal";
 
 /** 从 README 或本机元数据解析的作品展示信息 */
 export interface WorkManifest {

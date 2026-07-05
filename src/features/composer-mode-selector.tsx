@@ -15,14 +15,12 @@ export const COMPOSER_MODE_OPTIONS: {
 }[] = [
   { id: "ask", label: "提问", description: "只读工作区，回答问题" },
   { id: "normal", label: "创作", description: "探索作品结构后修改文件" },
-  { id: "scheme", label: "方案", description: "规划整体写作方案" },
   { id: "delegate", label: "托管", description: "设定目标，自动对话至产出" },
 ];
 
 const MODE_TAG_STYLES: Record<ComposerMode, string> = {
   ask: "border-success/25 bg-success/10 text-success",
   normal: "border-border bg-foreground/[0.04] text-foreground",
-  scheme: "border-warning/25 bg-warning/10 text-warning",
   delegate: "border-delegate/25 bg-delegate/10 text-delegate",
 };
 
@@ -103,7 +101,6 @@ export function ComposerModeSelector({
                 className={cn(
                   "text-xs font-medium",
                   item.id === "ask" && "text-success",
-                  item.id === "scheme" && "text-warning",
                   item.id === "delegate" && "text-delegate",
                   item.id === "normal" && "text-foreground",
                 )}

@@ -81,9 +81,6 @@ declare global {
               }
           >
         >;
-        getDiff: (workPath: string) => Promise<string>;
-        confirmScheme: (workPath: string) => Promise<WorkSnapshot>;
-        discardScheme: (workPath: string) => Promise<WorkSnapshot>;
         listWorkFileTree: (workPath: string) => Promise<WorkspaceEntry[]>;
         readWorkspaceFile: (
           workPath: string,
@@ -120,7 +117,7 @@ declare global {
             workPath: string;
             conversationId: string;
             message: string;
-            mode: "ask" | "normal" | "scheme";
+            mode: "ask" | "normal";
           },
           onActivity?: (event: {
             type: string;
@@ -159,7 +156,7 @@ declare global {
         getContextUsage: (input: {
           workPath: string;
           conversationId: string;
-          mode: "ask" | "normal" | "scheme";
+          mode: "ask" | "normal";
           draftMessage?: string;
         }) => Promise<{
           percent: number;

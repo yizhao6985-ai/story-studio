@@ -38,7 +38,12 @@ export type ActivityEntry = {
 };
 
 /** 对作品的写操作类型，与 workspace 写工具及 tool-gate 规则对应 */
-export type WriteAction = "patch" | "overwrite" | "create";
+export type WriteAction =
+  | "patch"
+  | "overwrite"
+  | "create"
+  | "delete"
+  | "rename";
 
 /**
  * planTasks 拆出的子任务，advanceSubtask 按序推进。
@@ -98,6 +103,9 @@ export type WorkLoopState = {
   /** 当前写入目标的连续校验失败次数 */
   verifyAttempts: number;
   maxVerifyRetries: number;
+  /** think 无 tool call 且子任务未完成时的重试次数 */
+  thinkIdleRetries: number;
+  maxThinkIdleRetries: number;
   /** 最近一次成功写入的路径，用于自动 verify */
   lastWrittenPath?: string;
   /**
@@ -111,6 +119,7 @@ export type WorkLoopState = {
 
 const WORK_LOOP_MAX_STEPS = 24;
 const WORK_LOOP_MAX_VERIFY_RETRIES = 2;
+const WORK_LOOP_MAX_THINK_IDLE_RETRIES = 2;
 
 /** prepareTurn 每轮调用，得到空的 WorkLoopState */
 export function createInitialWorkLoop(): WorkLoopState {
@@ -123,6 +132,8 @@ export function createInitialWorkLoop(): WorkLoopState {
     subtasks: [],
     verifyAttempts: 0,
     maxVerifyRetries: WORK_LOOP_MAX_VERIFY_RETRIES,
+    thinkIdleRetries: 0,
+    maxThinkIdleRetries: WORK_LOOP_MAX_THINK_IDLE_RETRIES,
     activityLog: [],
   };
 }
@@ -148,7 +159,9 @@ export function hasPendingSubtasks(workLoop: WorkLoopState): boolean {
 }
 
 /** 注入 think/synthesize system prompt 的工作循环摘要（中文可读） */
-export function formatWorkLoopForPrompt(workLoop: WorkLoopState | null | undefined): string {
+export function formatWorkLoopForPrompt(
+  workLoop: WorkLoopState | null | undefined,
+): string {
   if (!workLoop) {
     return "步数：0/24";
   }
@@ -164,7 +177,9 @@ export function formatWorkLoopForPrompt(workLoop: WorkLoopState | null | undefin
       `任务清单：${workLoop.subtasks.map((s, i) => `${i + 1}. ${s.intent}（${s.status}）`).join("；")}`,
     );
     if (current) {
-      lines.push(`当前子任务 (${idx}/${workLoop.subtasks.length})：${current.intent}`);
+      lines.push(
+        `当前子任务 (${idx}/${workLoop.subtasks.length})：${current.intent}`,
+      );
     }
   }
 

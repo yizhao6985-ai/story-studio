@@ -1,4 +1,4 @@
-import type { SubTask, WorkLoopState } from "#agent/shared/work-loop/types.js";
+import type { ActivityEntry, SubTask, WorkLoopState } from "#agent/shared/work-loop/types.js";
 
 export function applyPlannedSubtasks(
   workLoop: WorkLoopState,
@@ -39,6 +39,7 @@ export function advanceSubtask(workLoop: WorkLoopState): WorkLoopState {
       currentSubtaskId: next.id,
       pinnedTargets: [],
       verifyAttempts: 0,
+      thinkIdleRetries: 0,
     };
   }
 
@@ -76,22 +77,120 @@ export function completeCurrentSubtaskAfterVerify(
     currentSubtaskId: next?.id,
     pinnedTargets: [],
     verifyAttempts: 0,
+    thinkIdleRetries: 0,
   };
 }
 
-/** 运行结束时尚未 advance 的 in_progress 子任务，统一标记为 done（UI / 历史）。 */
+function activityForSubtask(
+  workLoop: WorkLoopState,
+  subtaskId: string,
+): ActivityEntry[] {
+  return workLoop.activityLog.filter(
+    (e) => e.subtaskId === subtaskId && e.stage !== "plan",
+  );
+}
+
+function runHasSuccessfulArtifact(workLoop: WorkLoopState): boolean {
+  return workLoop.activityLog.some(
+    (e) =>
+      (e.stage === "verify" || e.stage === "act") && e.status === "done",
+  );
+}
+
+function allOtherSubtasksDone(
+  workLoop: WorkLoopState,
+  subtaskId: string,
+): boolean {
+  return workLoop.subtasks.every(
+    (s) => s.id === subtaskId || s.status === "done",
+  );
+}
+
+export function hasSuccessfulVerifyForSubtask(
+  workLoop: WorkLoopState,
+  subtaskId: string,
+): boolean {
+  return activityForSubtask(workLoop, subtaskId).some(
+    (e) => e.stage === "verify" && e.status === "done",
+  );
+}
+
+function resolveIncompleteSubtaskStatus(
+  workLoop: WorkLoopState,
+  subtask: SubTask,
+): SubTask["status"] {
+  const entries = activityForSubtask(workLoop, subtask.id);
+
+  if (
+    entries.some((e) => e.stage === "verify" && e.status === "done")
+  ) {
+    return "done";
+  }
+
+  const hasSuccessfulAct = entries.some(
+    (e) => e.stage === "act" && e.status === "done",
+  );
+  const verifyErrors = entries.some(
+    (e) => e.stage === "verify" && e.status === "error",
+  );
+  if (hasSuccessfulAct && !verifyErrors) {
+    return "done";
+  }
+  if (hasSuccessfulAct && verifyErrors) {
+    return "failed";
+  }
+
+  const hasReadOnlyProgress = entries.some(
+    (e) =>
+      (e.stage === "explore" || e.stage === "read" || e.stage === "target") &&
+      e.status === "done",
+  );
+  if (hasReadOnlyProgress) {
+    return "done";
+  }
+
+  // 末位或空步骤子任务：实际产出可能已在前序子任务中完成
+  if (
+    entries.length === 0 &&
+    runHasSuccessfulArtifact(workLoop) &&
+    allOtherSubtasksDone(workLoop, subtask.id)
+  ) {
+    return "done";
+  }
+
+  return "failed";
+}
+
+/** 运行结束时推断未完成子任务的最终状态，避免校验已通过却仍显示失败。 */
 export function finalizeSubtasksOnCompletion(
   workLoop: WorkLoopState,
 ): WorkLoopState {
-  if (!workLoop.subtasks.some((s) => s.status === "in_progress")) {
-    return workLoop;
+  const hasIncomplete = workLoop.subtasks.some(
+    (s) => s.status === "in_progress" || s.status === "pending",
+  );
+  if (!hasIncomplete) {
+    return { ...workLoop, currentSubtaskId: undefined };
   }
+
+  const subtasks = workLoop.subtasks.map((s) => {
+    if (s.status !== "in_progress" && s.status !== "pending") return s;
+    const status = resolveIncompleteSubtaskStatus(workLoop, s);
+    const verifyEntry = activityForSubtask(workLoop, s.id).find(
+      (e) => e.stage === "verify" && e.status === "done",
+    );
+    const actEntry = activityForSubtask(workLoop, s.id).find(
+      (e) => e.stage === "act" && e.status === "done",
+    );
+    return {
+      ...s,
+      status,
+      targetPath: verifyEntry?.path ?? actEntry?.path ?? s.targetPath,
+    };
+  });
 
   return {
     ...workLoop,
-    subtasks: workLoop.subtasks.map((s) =>
-      s.status === "in_progress" ? { ...s, status: "done" as const } : s,
-    ),
+    subtasks,
     currentSubtaskId: undefined,
   };
 }

@@ -8,7 +8,18 @@ import {
   readAppSession,
   saveAppSession,
 } from "@/lib/app-session";
-import { formatLlmErrorMessage, isAbortError } from "@/lib/api-error-message";
+import {
+  activityErrorToLlmDisplay,
+  AGENT_RUN_INCOMPLETE_MESSAGE,
+  resolveRunFailure,
+  type LlmErrorDisplay,
+} from "@/lib/agent-error-display";
+import {
+  classifyLlmError,
+  isUserCancelError,
+  AGENT_RUN_STALL_MS,
+  AGENT_RUN_TIMEOUT_MS,
+} from "@/lib/api-error-message";
 import { useAppKeyboardShortcuts } from "@/hooks/keyboard/use-app-keyboard-shortcuts";
 import { useSidebarPanelCollapse } from "@/hooks/layout/use-sidebar-panel-collapse";
 import { useWorkspacePanelCollapse } from "@/hooks/layout/use-workspace-panel-collapse";
@@ -51,7 +62,8 @@ export function useAppShellState() {
     useState<SettingsSectionId>("appearance");
   const [composeDefaultWorkPath, setComposeDefaultWorkPath] = useState<string | undefined>();
   const [createWorkspaceOpen, setCreateWorkspaceOpen] = useState(false);
-  const [composerError, setComposerError] = useState("");
+  const [llmError, setLlmError] = useState<LlmErrorDisplay | null>(null);
+  const [appNotice, setAppNotice] = useState("");
   const [contextUsage, setContextUsage] = useState<ContextUsageInfo | null>(null);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -59,6 +71,12 @@ export function useAppShellState() {
   const workspaceFilesRef = useRef<WorkspaceFilesHandle>(null);
   const sessionRestoredRef = useRef(false);
   const activeConversationKeyRef = useRef("");
+  const agentRunRef = useRef({
+    generation: 0,
+    startedAt: 0,
+    lastActivityAt: 0,
+    terminal: false,
+  });
 
   const { configured: llmConfigured, refresh: refreshLlmStatus, setConfigured: setLlmConfigured } =
     useLlmConfigured();
@@ -157,7 +175,35 @@ export function useAppShellState() {
         const next = [...m];
         const idx = next.length - 1;
         const last = next[idx];
-        if (last?.role !== "assistant" || !last.streaming) return m;
+        if (last?.role !== "assistant") return m;
+
+        if (event.type === "error") {
+          next[idx] = {
+            ...last,
+            text: last.text || AGENT_RUN_INCOMPLETE_MESSAGE,
+            streaming: false,
+            agentStatus: undefined,
+          };
+          return next;
+        }
+
+        if (event.type === "done") {
+          const reply =
+            event.reply && event.reply !== "（无回复）"
+              ? event.reply
+              : last.text || event.reply;
+          next[idx] = {
+            ...last,
+            text: reply ?? "",
+            streaming: false,
+            agentStatus: undefined,
+            ...(event.subtasks?.length ? { subtasks: event.subtasks } : {}),
+          };
+          void refreshContextUsage();
+          return next;
+        }
+
+        if (!last.streaming) return m;
 
         switch (event.type) {
           case "status":
@@ -175,18 +221,8 @@ export function useAppShellState() {
           case "reply_delta":
             next[idx] = { ...last, text: last.text + event.delta };
             break;
-          case "done":
-            next[idx] = {
-              ...last,
-              text: event.reply ?? last.text,
-              streaming: false,
-            };
-            void refreshContextUsage();
-            break;
           case "context_compacted":
             void refreshContextUsage();
-            break;
-          case "error":
             break;
           default:
             return m;
@@ -196,6 +232,110 @@ export function useAppShellState() {
     },
     [refreshContextUsage],
   );
+
+  const markAgentRunTerminal = useCallback(() => {
+    agentRunRef.current.terminal = true;
+  }, []);
+
+  const touchAgentRunActivity = useCallback(() => {
+    agentRunRef.current.lastActivityAt = Date.now();
+  }, []);
+
+  const beginAgentRun = useCallback(() => {
+    const generation = agentRunRef.current.generation + 1;
+    agentRunRef.current = {
+      generation,
+      startedAt: Date.now(),
+      lastActivityAt: Date.now(),
+      terminal: false,
+    };
+    return generation;
+  }, []);
+
+  const finalizeRunFailure = useCallback((error: unknown) => {
+    const resolved = resolveRunFailure(error);
+    agentRunRef.current.generation += 1;
+    agentRunRef.current.terminal = true;
+    if (resolved.llm) setLlmError(resolved.llm);
+    if (resolved.appNotice) setAppNotice(resolved.appNotice);
+    setMessages((m) => {
+      const next = [...m];
+      const last = next[next.length - 1];
+      if (last?.role === "assistant") {
+        next[next.length - 1] = {
+          ...last,
+          text: resolved.assistantMessage,
+          streaming: false,
+          agentStatus: undefined,
+        };
+      }
+      return next;
+    });
+    setLoading(false);
+  }, []);
+
+  const finalizeAppStall = useCallback((stalled: boolean) => {
+    agentRunRef.current.generation += 1;
+    agentRunRef.current.terminal = true;
+    setAppNotice(
+      stalled
+        ? "执行过程中长时间无响应，已自动停止。请缩小任务范围后重试。"
+        : "执行时间过长，已自动停止。请拆分任务后重试。",
+    );
+    setMessages((m) => {
+      const next = [...m];
+      const last = next[next.length - 1];
+      if (last?.role === "assistant" && last.streaming) {
+        next[next.length - 1] = {
+          ...last,
+          text: "任务已停止。如仍无法继续，请缩小任务范围或新开对话后再试。",
+          streaming: false,
+          agentStatus: undefined,
+        };
+      }
+      return next;
+    });
+    setLoading(false);
+  }, []);
+
+  const createRunActivityHandler = useCallback(
+    (generation: number) => (event: AgentActivityEvent) => {
+      if (generation !== agentRunRef.current.generation) return;
+      touchAgentRunActivity();
+      if (event.type === "done" || event.type === "error") {
+        markAgentRunTerminal();
+        if (event.type === "error") {
+          const llmDisplay = activityErrorToLlmDisplay(event);
+          if (llmDisplay) setLlmError(llmDisplay);
+        }
+      }
+      applyAssistantActivity(event);
+    },
+    [
+      applyAssistantActivity,
+      markAgentRunTerminal,
+      touchAgentRunActivity,
+    ],
+  );
+
+  useEffect(() => {
+    if (!loading) return;
+
+    const interval = window.setInterval(() => {
+      const run = agentRunRef.current;
+      if (run.terminal) return;
+
+      const now = Date.now();
+      const stalled = now - run.lastActivityAt > AGENT_RUN_STALL_MS;
+      const expired = now - run.startedAt > AGENT_RUN_TIMEOUT_MS;
+      if (!stalled && !expired) return;
+
+      void window.storyStudio.agent.cancel();
+      finalizeAppStall(stalled);
+    }, 5000);
+
+    return () => window.clearInterval(interval);
+  }, [loading, finalizeAppStall]);
 
   const appendDelegateSummary = useCallback(
     (input: {
@@ -220,6 +360,7 @@ export function useAppShellState() {
 
   const applyDelegateActivity = useCallback(
     (event: AgentActivityEvent) => {
+      touchAgentRunActivity();
       switch (event.type) {
         case "delegate_turn":
           setMessages((m) => [
@@ -245,6 +386,7 @@ export function useAppShellState() {
           });
           break;
         case "delegate_complete":
+          markAgentRunTerminal();
           setMessages((m) => {
             const next = [...m];
             const last = next[next.length - 1];
@@ -262,10 +404,14 @@ export function useAppShellState() {
           setDelegateSession(null);
           break;
         default:
+          if (event.type === "error") {
+            const llmDisplay = activityErrorToLlmDisplay(event);
+            if (llmDisplay) setLlmError(llmDisplay);
+          }
           applyAssistantActivity(event);
       }
     },
-    [appendDelegateSummary, applyAssistantActivity],
+    [appendDelegateSummary, applyAssistantActivity, markAgentRunTerminal, touchAgentRunActivity],
   );
 
   const sendMessage = useCallback(
@@ -284,7 +430,8 @@ export function useAppShellState() {
 
       const agentMode = mode as AgentMode;
       setInput("");
-      setComposerError("");
+      setLlmError(null);
+      setAppNotice("");
       setMessages((m) => [
         ...m,
         { role: "user", text: trimmed },
@@ -298,6 +445,7 @@ export function useAppShellState() {
         },
       ]);
       setLoading(true);
+      const runGeneration = beginAgentRun();
 
       try {
         const result = await window.storyStudio.agent.run(
@@ -307,18 +455,24 @@ export function useAppShellState() {
             message: trimmed,
             mode: agentMode,
           },
-          applyAssistantActivity as NonNullable<
+          createRunActivityHandler(runGeneration) as NonNullable<
             Parameters<typeof window.storyStudio.agent.run>[1]
           >,
         );
+        if (runGeneration !== agentRunRef.current.generation) return;
+        markAgentRunTerminal();
         setMessages((m) => {
           const next = [...m];
           const idx = next.length - 1;
           const last = next[idx];
           if (last?.role === "assistant") {
+            const reply =
+              result.reply && result.reply !== "（无回复）"
+                ? result.reply
+                : last.text || result.reply;
             next[idx] = {
               role: "assistant",
-              text: result.reply,
+              text: reply,
               streaming: false,
               activityLog: result.activityLog as ActivityEntry[],
               subtasks: result.subtasks,
@@ -332,24 +486,31 @@ export function useAppShellState() {
         await loadConversationsFor(workPath);
         void refreshContextUsage();
       } catch (err) {
-        setMessages((m) => {
-          const next = [...m];
-          const last = next[next.length - 1];
-          if (last?.role === "assistant" && last.streaming) {
-            next.pop();
-          }
-          return next;
-        });
-        if (isAbortError(err)) {
+        if (runGeneration !== agentRunRef.current.generation) return;
+        if (isUserCancelError(err)) {
+          setMessages((m) => {
+            const next = [...m];
+            const last = next[next.length - 1];
+            if (last?.role === "assistant" && last.streaming) {
+              next.pop();
+            }
+            return next;
+          });
+          markAgentRunTerminal();
           return;
         }
-        const message = err instanceof Error ? err.message : String(err);
-        if (message.includes("LLM_NOT_CONFIGURED") || message.includes("LLM_API_KEY_MISSING")) {
+        if (!agentRunRef.current.terminal) {
+          finalizeRunFailure(err);
+        } else {
+          setLoading(false);
+        }
+        if (classifyLlmError(err).kind === "not_configured") {
           setLlmConfigured(false);
         }
-        setComposerError(formatLlmErrorMessage(message));
       } finally {
-        setLoading(false);
+        if (runGeneration === agentRunRef.current.generation) {
+          setLoading(false);
+        }
       }
     },
     [
@@ -362,7 +523,10 @@ export function useAppShellState() {
       loadConversationsFor,
       refreshContextUsage,
       setLlmConfigured,
-      applyAssistantActivity,
+      beginAgentRun,
+      createRunActivityHandler,
+      markAgentRunTerminal,
+      finalizeRunFailure,
     ],
   );
 
@@ -378,7 +542,8 @@ export function useAppShellState() {
       }
 
       setInput("");
-      setComposerError("");
+      setLlmError(null);
+      setAppNotice("");
       setLoading(true);
       setDelegateSession({
         status: "running",
@@ -387,6 +552,7 @@ export function useAppShellState() {
         artifactPaths: [],
         goal: trimmed,
       });
+      const runGeneration = beginAgentRun();
 
       try {
         await window.storyStudio.agent.startDelegate(
@@ -405,26 +571,34 @@ export function useAppShellState() {
         cacheManifest(workPath, snap.manifest);
         await loadConversationsFor(workPath);
         void refreshContextUsage();
+        markAgentRunTerminal();
       } catch (err) {
+        if (runGeneration !== agentRunRef.current.generation) return;
         setDelegateSession(null);
-        setMessages((m) => {
-          const next = [...m];
-          const last = next[next.length - 1];
-          if (last?.role === "assistant" && last.streaming) {
-            next.pop();
-          }
-          return next;
-        });
-        if (isAbortError(err)) {
+        if (isUserCancelError(err)) {
+          setMessages((m) => {
+            const next = [...m];
+            const last = next[next.length - 1];
+            if (last?.role === "assistant" && last.streaming) {
+              next.pop();
+            }
+            return next;
+          });
+          markAgentRunTerminal();
           return;
         }
-        const message = err instanceof Error ? err.message : String(err);
-        if (message.includes("LLM_NOT_CONFIGURED") || message.includes("LLM_API_KEY_MISSING")) {
+        if (!agentRunRef.current.terminal) {
+          finalizeRunFailure(err);
+        } else {
+          setLoading(false);
+        }
+        if (classifyLlmError(err).kind === "not_configured") {
           setLlmConfigured(false);
         }
-        setComposerError(formatLlmErrorMessage(message));
       } finally {
-        setLoading(false);
+        if (runGeneration === agentRunRef.current.generation) {
+          setLoading(false);
+        }
         setDelegateSession(null);
       }
     },
@@ -439,6 +613,9 @@ export function useAppShellState() {
       refreshContextUsage,
       setLlmConfigured,
       applyDelegateActivity,
+      beginAgentRun,
+      markAgentRunTerminal,
+      finalizeRunFailure,
     ],
   );
 
@@ -713,7 +890,8 @@ export function useAppShellState() {
       setActiveConversationId(null);
       setMessages([]);
       setInput("");
-      setComposerError("");
+      setLlmError(null);
+      setAppNotice("");
       clearAppSession();
 
       if (activeWorkspace?.workPath === workPath) {
@@ -742,7 +920,8 @@ export function useAppShellState() {
         setActiveConversationId(null);
         setMessages([]);
         setInput("");
-        setComposerError("");
+        setLlmError(null);
+      setAppNotice("");
         clearAppSession();
       }
 
@@ -782,7 +961,8 @@ export function useAppShellState() {
     composeDefaultWorkPath,
     createWorkspaceOpen,
     setCreateWorkspaceOpen,
-    composerError,
+    llmError,
+    appNotice,
     contextUsage,
     delegateSession,
     shortcutsOpen,

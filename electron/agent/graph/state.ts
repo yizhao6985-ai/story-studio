@@ -61,7 +61,6 @@ export const AgentState = Annotation.Root({
    *
    * - "ask"    — 只读问答，无写文件工具
    * - "normal" — 完整创作循环（读→定位→写→校验）
-   * - "scheme" — 方案/大纲模式
    *
    * runner 每轮传入；影响 planTasks / think / tool-gate / context 预算估算。
    *

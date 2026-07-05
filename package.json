@@ -10,6 +10,7 @@
   },
   "scripts": {
     "dev": "vite",
+    "dev:langsmith": "bash scripts/dev-langsmith.sh",
     "build": "tsc --noEmit && vite build",
     "check-types": "tsc --noEmit && tsc --noEmit -p tsconfig.node.json",
     "lint": "eslint .",

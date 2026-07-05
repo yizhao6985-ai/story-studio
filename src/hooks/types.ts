@@ -1,12 +1,11 @@
 import type { WorkManifest } from "@/lib/story";
 
-export type AgentMode = "ask" | "normal" | "scheme";
+export type AgentMode = "ask" | "normal";
 export type ComposerMode = AgentMode | "delegate";
 
 export const DEFAULT_DELEGATE_MAX_TURNS = 10;
 export const DELEGATE_MAX_TURNS_MIN = 1;
 export const DELEGATE_MAX_TURNS_MAX = 30;
-export type SchemePhase = "drafting" | "executing";
 
 export type DelegateSessionStatus =
   | "running"
@@ -61,8 +60,15 @@ export type AgentActivityEvent =
   | { type: "step"; entry: ActivityEntry }
   | { type: "reply_delta"; delta: string }
   | { type: "context_compacted" }
-  | { type: "done"; reply: string }
-  | { type: "error"; message: string }
+  | { type: "done"; reply: string; subtasks?: SubTaskSummary[] }
+  | {
+      type: "error";
+      source?: "llm" | "app";
+      kind?: string;
+      message: string;
+      suggestion?: string;
+      detail?: string;
+    }
   | {
       type: "delegate_turn";
       turn: number;

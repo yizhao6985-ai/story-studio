@@ -28,7 +28,7 @@ export const PANEL_MIN_PX = {
 /** 各区域最大宽度（像素）。 */
 export const PANEL_MAX_PX = {
   sidebar: 280,
-  fileTree: 340,
+  fileTree: 280,
   conversation: 640,
 } as const;
 

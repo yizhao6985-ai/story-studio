@@ -25,7 +25,12 @@ import {
   messagesToChatHistory,
   type HistoryChatMessage,
 } from "../messages/history.js";
-import { messageContentToText } from "../messages/content.js";
+import { pickVisibleAssistantReply } from "../messages/history.js";
+import {
+  buildSynthesizeFallbackReply,
+  EMPTY_ASSISTANT_REPLY,
+  isEmptyAssistantReply,
+} from "../nodes/synthesize/fallback.js";
 import { extractTurnMeta } from "../messages/turn-meta.js";
 import { finalizeSubtasksOnCompletion } from "../nodes/advance-subtask/subtasks.js";
 import {
@@ -37,6 +42,15 @@ import type {
   WorkLoopState,
 } from "../shared/work-loop/types.js";
 import { getWorkGraph } from "./work-graph.js";
+import {
+  AGENT_RUN_TIMEOUT_ABORT,
+  AGENT_RUN_TIMEOUT_MS,
+  AGENT_USER_CANCEL_ABORT,
+  classifyLlmError,
+  isUserCancelError,
+  toAgentRunError,
+} from "../../../src/lib/llm-errors.js";
+import { isLlmLayerError } from "../../../src/lib/agent-error-display.js";
 
 let activeRunAbort: AbortController | null = null;
 
@@ -73,6 +87,7 @@ const NODE_STATUS: Record<string, AgentActivityEvent & { type: "status" }> = {
   think: { type: "status", status: "thinking" },
   executeTools: { type: "status", status: "executing" },
   synthesize: { type: "status", status: "synthesizing" },
+  escalate: { type: "status", status: "synthesizing" },
 };
 
 export async function loadConversationMessages(input: {
@@ -162,11 +177,52 @@ function summarizeSubtasks(
   }));
 }
 
+function resolveRunReply(
+  messages: unknown[],
+  workLoop: WorkLoopState | undefined,
+  streamedReply: string,
+  mode: AgentMode,
+): string {
+  const picked = pickVisibleAssistantReply(messages);
+  if (!isEmptyAssistantReply(picked)) return picked;
+
+  const streamed = streamedReply.trim();
+  if (streamed) return streamed;
+
+  if (workLoop) {
+    return buildSynthesizeFallbackReply(
+      finalizeSubtasksOnCompletion(workLoop),
+      mode,
+    );
+  }
+
+  return EMPTY_ASSISTANT_REPLY;
+}
+
 export async function runLocalAgent(
   input: AgentRunInput,
 ): Promise<AgentRunResult> {
-  activeRunAbort?.abort();
+  activeRunAbort?.abort(AGENT_USER_CANCEL_ABORT);
   activeRunAbort = new AbortController();
+  const runAbort = activeRunAbort;
+  const runTimeoutId = setTimeout(() => {
+    runAbort.abort(AGENT_RUN_TIMEOUT_ABORT);
+  }, AGENT_RUN_TIMEOUT_MS);
+
+  let terminalEventSent = false;
+  const emitTerminalError = (error: unknown) => {
+    if (terminalEventSent) return;
+    const agentError = toAgentRunError(error);
+    emitAgentActivity({
+      type: "error",
+      source: "llm",
+      kind: agentError.kind,
+      message: agentError.userMessage,
+      suggestion: agentError.suggestion,
+      detail: agentError.raw,
+    });
+    terminalEventSent = true;
+  };
 
   await prepareConversationStore(input.workPath);
   const graph = await getWorkGraph(input.workPath);
@@ -179,13 +235,23 @@ export async function runLocalAgent(
   const manageActivityEmitter = input.manageActivityEmitter !== false;
   const seenStepIds = new Set<string>();
   const lastSubtasksJson = { value: "" };
+  let streamedReply = "";
 
   try {
     if (manageActivityEmitter) {
+      setAgentActivityEmitter((event) => {
+        if (event.type === "reply_delta") {
+          streamedReply += event.delta;
+        }
+        (
+          input.onActivity as
+            | ((event: DelegateActivityEvent) => void)
+            | undefined
+        )?.(event);
+      });
+    } else if (input.onActivity) {
       setAgentActivityEmitter(
-        (input.onActivity as
-          | ((event: DelegateActivityEvent) => void)
-          | undefined) ?? null,
+        input.onActivity as (event: DelegateActivityEvent) => void,
       );
     }
 
@@ -224,16 +290,22 @@ export async function runLocalAgent(
     const finalState = await graph.getState(config);
     const values = finalState.values ?? {};
     const messages = values.messages ?? [];
+
+    const workLoop = values.workLoop as WorkLoopState | undefined;
+    const finalizedWorkLoop = workLoop
+      ? finalizeSubtasksOnCompletion(workLoop)
+      : workLoop;
+    const reply = resolveRunReply(
+      messages,
+      finalizedWorkLoop,
+      streamedReply,
+      input.mode,
+    );
+
+    let activityLog = finalizedWorkLoop?.activityLog ?? [];
     const lastAi = [...messages]
       .reverse()
       .find((m) => m._getType?.() === "ai" || m.type === "ai");
-    const reply =
-      typeof lastAi?.content === "string"
-        ? lastAi.content
-        : messageContentToText(lastAi?.content) || "（无回复）";
-
-    const workLoop = values.workLoop as WorkLoopState | undefined;
-    let activityLog = workLoop?.activityLog ?? [];
     if (activityLog.length === 0 && lastAi) {
       const meta = extractTurnMeta(
         lastAi as { additional_kwargs?: Record<string, unknown> },
@@ -242,9 +314,7 @@ export async function runLocalAgent(
         activityLog = meta.activityLog;
       }
     }
-    const subtasks = summarizeSubtasks(
-      workLoop ? finalizeSubtasksOnCompletion(workLoop) : workLoop,
-    );
+    const subtasks = summarizeSubtasks(finalizedWorkLoop);
 
     if (subtasks.length > 0) {
       emitAgentActivity({ type: "subtasks", subtasks });
@@ -257,7 +327,8 @@ export async function runLocalAgent(
       assistantReply: reply,
     });
 
-    emitAgentActivity({ type: "done", reply });
+    emitAgentActivity({ type: "done", reply, subtasks });
+    terminalEventSent = true;
 
     return {
       reply,
@@ -265,12 +336,16 @@ export async function runLocalAgent(
       subtasks,
     };
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    if (!message.toLowerCase().includes("abort")) {
-      emitAgentActivity({ type: "error", message });
+    if (isUserCancelError(error)) {
+      throw error;
     }
-    throw error;
+    const classified = classifyLlmError(error);
+    if (isLlmLayerError(classified, error)) {
+      emitTerminalError(error);
+    }
+    throw toAgentRunError(error);
   } finally {
+    clearTimeout(runTimeoutId);
     if (manageActivityEmitter) {
       setAgentActivityEmitter(null);
     }
@@ -278,6 +353,6 @@ export async function runLocalAgent(
 }
 
 export function cancelLocalAgent(): void {
-  activeRunAbort?.abort();
+  activeRunAbort?.abort(AGENT_USER_CANCEL_ABORT);
   activeRunAbort = null;
 }

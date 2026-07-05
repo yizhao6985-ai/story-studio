@@ -27,6 +27,13 @@ import {
   runLocalAgent,
   type AgentRunResult,
 } from "#agent/runtime/runner.js";
+import {
+  formatClassifiedErrorMessage,
+  isAgentRunTimeoutError,
+  isUserCancelError,
+  toAgentRunError,
+} from "../../../../src/lib/llm-errors.js";
+import { isLlmLayerError } from "../../../../src/lib/agent-error-display.js";
 
 export type DelegateSessionStatus =
   | "completed"
@@ -61,9 +68,64 @@ function emitDelegate(event: DelegateActivityEvent): void {
   emitAgentActivity(event);
 }
 
-function isAbortError(error: unknown): boolean {
-  const message = error instanceof Error ? error.message : String(error);
-  return message.toLowerCase().includes("abort");
+function delegatePausedResult(input: {
+  summary: string;
+  artifactPaths: string[];
+  turns: number;
+}): DelegateRunResult {
+  emitDelegate({
+    type: "delegate_complete",
+    status: "paused",
+    summary: input.summary,
+    artifactPaths: input.artifactPaths,
+    turns: input.turns,
+  });
+  return {
+    status: "paused",
+    summary: input.summary,
+    artifactPaths: input.artifactPaths,
+    turns: input.turns,
+  };
+}
+
+function handleDelegateAgentError(
+  error: unknown,
+  artifactPaths: string[],
+  turns: number,
+): DelegateRunResult | null {
+  if (isUserCancelError(error)) {
+    return delegatePausedResult({
+      summary: "托管已暂停。",
+      artifactPaths,
+      turns,
+    });
+  }
+
+  const agentError = toAgentRunError(error);
+  if (
+    agentError.kind === "content_policy" ||
+    isAgentRunTimeoutError(error)
+  ) {
+    if (isLlmLayerError(agentError, error)) {
+      emitDelegate({
+        type: "error",
+        source: "llm",
+        kind: agentError.kind,
+        message: agentError.userMessage,
+        suggestion: agentError.suggestion,
+        detail: agentError.raw,
+      });
+    }
+    return delegatePausedResult({
+      summary: isAgentRunTimeoutError(error)
+        ? "托管已暂停。执行超时，请缩小目标范围。"
+        : "托管已暂停。AI 服务返回错误，请查看下方红色提示。",
+      artifactPaths,
+      turns,
+    });
+  }
+
+  return null;
 }
 
 export function cancelDelegateSession(): void {
@@ -354,22 +416,12 @@ export async function runDelegateSession(
           onActivity: input.onActivity,
         });
       } catch (error) {
-        if (isAbortError(error)) {
-          const summary = "托管已暂停。";
-          emitDelegate({
-            type: "delegate_complete",
-            status: "paused",
-            summary,
-            artifactPaths: outcome.artifactPaths,
-            turns: nextTurn,
-          });
-          return {
-            status: "paused",
-            summary,
-            artifactPaths: outcome.artifactPaths,
-            turns: nextTurn,
-          };
-        }
+        const handled = handleDelegateAgentError(
+          error,
+          outcome.artifactPaths,
+          nextTurn,
+        );
+        if (handled) return handled;
         throw error;
       }
 
@@ -423,35 +475,33 @@ export async function runDelegateSession(
       turns: turn,
     };
   } catch (error) {
-    if (isAbortError(error)) {
-      const summary = "托管已暂停。";
-      emitDelegate({
-        type: "delegate_complete",
-        status: "paused",
-        summary,
-        artifactPaths: outcome.artifactPaths,
-        turns: turn,
-      });
-      return {
-        status: "paused",
-        summary,
-        artifactPaths: outcome.artifactPaths,
-        turns: turn,
-      };
-    }
+    const handled = handleDelegateAgentError(
+      error,
+      outcome.artifactPaths,
+      turn,
+    );
+    if (handled) return handled;
 
-    const message = error instanceof Error ? error.message : String(error);
-    emitDelegate({ type: "error", message });
+    const agentError = toAgentRunError(error);
+    const summary = formatClassifiedErrorMessage(agentError);
+    emitDelegate({
+      type: "error",
+      source: "llm",
+      kind: agentError.kind,
+      message: agentError.userMessage,
+      suggestion: agentError.suggestion,
+      detail: agentError.raw,
+    });
     emitDelegate({
       type: "delegate_complete",
       status: "failed",
-      summary: message || "托管失败",
+      summary,
       artifactPaths: outcome.artifactPaths,
       turns: turn,
     });
     return {
       status: "failed",
-      summary: message || "托管失败",
+      summary,
       artifactPaths: outcome.artifactPaths,
       turns: turn,
     };

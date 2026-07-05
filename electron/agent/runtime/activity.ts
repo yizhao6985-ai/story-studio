@@ -12,8 +12,15 @@ export type AgentActivityEvent =
   | { type: "step"; entry: ActivityEntry }
   | { type: "reply_delta"; delta: string }
   | { type: "context_compacted" }
-  | { type: "done"; reply: string }
-  | { type: "error"; message: string };
+  | { type: "done"; reply: string; subtasks?: SubTaskSummary[] }
+  | {
+      type: "error";
+      source?: "llm" | "app";
+      kind?: string;
+      message: string;
+      suggestion?: string;
+      detail?: string;
+    };
 
 export type DelegateSessionStatus =
   | "running"

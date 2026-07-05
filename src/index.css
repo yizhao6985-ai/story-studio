@@ -30,7 +30,6 @@
   --sidebar: #f5f5f5;
   --sidebar-foreground: #333333;
   --ask: #107c10;
-  --scheme: #c45c00;
   --delegate: #ea580c;
   --warning: #bf8803;
   --success: #107c10;
@@ -60,7 +59,6 @@
   --sidebar: rgba(20, 20, 20, 0.86);
   --sidebar-foreground: #cccccc;
   --ask: #89d185;
-  --scheme: #e8a54b;
   --delegate: #fb923c;
   --warning: #cca700;
   --success: #89d185;
@@ -89,7 +87,6 @@
   --color-sidebar: var(--sidebar);
   --color-sidebar-foreground: var(--sidebar-foreground);
   --color-ask: var(--ask);
-  --color-scheme: var(--scheme);
   --color-delegate: var(--delegate);
   --color-warning: var(--warning);
   --color-success: var(--success);

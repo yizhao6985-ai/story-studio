@@ -103,9 +103,20 @@ function ActivityStepRow({
   onOpenPath?: (path: string) => void;
 }) {
   const isError = entry.status === "error";
+  const showStatusIcon = entry.stage === "verify" || entry.stage === "act";
+  const iconClassName = "h-3 w-3 shrink-0 stroke-[1.75]";
 
   return (
     <li className="flex items-baseline gap-2 text-[11px] leading-[1.35] text-muted-foreground">
+      {showStatusIcon ? (
+        <span className="inline-flex shrink-0 translate-y-px items-center justify-center">
+          {isError ? (
+            <SquareX className={cn(iconClassName, "text-destructive")} />
+          ) : (
+            <SquareCheck className={cn(iconClassName, "text-muted-foreground")} />
+          )}
+        </span>
+      ) : null}
       <span className="shrink-0 text-muted-foreground/70">
         {STAGE_LABEL[entry.stage]}
       </span>
