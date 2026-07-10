@@ -1,14 +1,13 @@
-import type {
-  AgentActivityEvent,
-  DelegateActivityEvent,
-} from "@story-studio/shared/activity";
-import type { RequestContext } from "@mastra/core/request-context";
+import { RequestContext } from "@mastra/core/request-context";
+import type { DelegateActivityEvent } from "@story-studio/shared/activity";
 import {
   isUserCancelError,
   toAgentRunError,
 } from "@story-studio/shared/llm-errors";
 import type { DelegateRunResult } from "@story-studio/shared/agent-types";
-import { cancelLocalAgent, runLocalAgent } from "./run.js";
+
+import { cancelLocalAgent } from "./run.js";
+import { runWritingWorkflow } from "./writing-workflow.js";
 
 export type DelegateRunInput = {
   workPath: string;
@@ -20,13 +19,22 @@ export type DelegateRunInput = {
 };
 
 const DEFAULT_MAX_TURNS = 10;
-const COMPLETE_TAG = "[DELEGATE_COMPLETE]";
 
 let activeDelegateAbort: AbortController | null = null;
 
 export function cancelDelegateSession(): void {
   activeDelegateAbort?.abort();
   cancelLocalAgent();
+}
+
+function buildRequestContext(
+  workPath: string,
+  existing?: RequestContext,
+): RequestContext {
+  const requestContext = existing ?? new RequestContext();
+  requestContext.set("mode", "normal");
+  requestContext.set("workPath", workPath);
+  return requestContext;
 }
 
 export async function runDelegateSession(
@@ -42,6 +50,10 @@ export async function runDelegateSession(
   if (!goal) throw new Error("DELEGATE_GOAL_REQUIRED");
 
   const artifactPaths = new Set<string>();
+  const requestContext = buildRequestContext(
+    input.workPath,
+    input.requestContext,
+  );
 
   try {
     emit({
@@ -53,7 +65,9 @@ export async function runDelegateSession(
       goal,
     });
 
-    let lastReply = "";
+    let lastSummary = "";
+    let contextHints: string | undefined;
+
     for (let turn = 1; turn <= maxTurns; turn++) {
       if (signal.aborted) {
         return {
@@ -64,10 +78,9 @@ export async function runDelegateSession(
         };
       }
 
-      const prompt =
-        turn === 1
-          ? `【托管任务】${goal}\n请自主探索作品、完成修改。完成后在回复末尾单独一行输出 ${COMPLETE_TAG} 和简要摘要。`
-          : `【继续托管】${goal}\n上一轮尚未完成。请继续推进；完成时输出 ${COMPLETE_TAG}。`;
+      const turnLabel =
+        turn === 1 ? "【托管任务】" : "【继续托管】";
+      const prompt = `${turnLabel}${goal}`;
 
       emit({ type: "delegate_turn", turn, message: prompt });
       emit({
@@ -79,40 +92,68 @@ export async function runDelegateSession(
         goal,
       });
 
-      const result = await runLocalAgent({
-        workPath: input.workPath,
-        conversationId: input.conversationId,
-        message: prompt,
-        mode: "normal",
-        manageActivityEmitter: false,
-        requestContext: input.requestContext,
-        onActivity: emit as (event: AgentActivityEvent) => void,
+      emit({ type: "status", status: "thinking" });
+
+      const workflowResult = await runWritingWorkflow({
+        brief: {
+          goal,
+          scope: ["**/*"],
+          constraints: "自主完成托管任务；保持原有文风与格式；未明确要求不要 delete",
+          contextHints,
+        },
+        requestContext,
+        abortSignal: signal,
       });
 
-      lastReply = result.reply;
-      for (const path of result.artifactPaths) {
-        artifactPaths.add(path);
-      }
-
-      if (lastReply.includes(COMPLETE_TAG)) {
-        const summary = lastReply.replace(COMPLETE_TAG, "").trim();
+      if (workflowResult.status === "failed") {
+        const summary = workflowResult.error ?? "写作流程执行失败。";
         emit({
           type: "delegate_complete",
-          status: "completed",
+          status: "failed",
           summary,
           artifactPaths: [...artifactPaths],
           turns: turn,
         });
         return {
-          status: "completed",
+          status: "failed",
           summary,
           artifactPaths: [...artifactPaths],
           turns: turn,
         };
       }
+
+      const report = workflowResult.report!;
+      lastSummary = report.summary;
+      for (const path of report.changedFiles) {
+        artifactPaths.add(path);
+      }
+
+      emit({ type: "reply_delta", delta: report.summary });
+      emit({ type: "done", reply: report.summary });
+
+      const hasOpenQuestions =
+        report.openQuestions && report.openQuestions.length > 0;
+
+      if (!hasOpenQuestions) {
+        emit({
+          type: "delegate_complete",
+          status: "completed",
+          summary: report.summary,
+          artifactPaths: [...artifactPaths],
+          turns: turn,
+        });
+        return {
+          status: "completed",
+          summary: report.summary,
+          artifactPaths: [...artifactPaths],
+          turns: turn,
+        };
+      }
+
+      contextHints = report.openQuestions!.join("\n");
     }
 
-    const summary = `已达最大轮数（${maxTurns}）。最后状态：${lastReply.slice(0, 200)}`;
+    const summary = `已达最大轮数（${maxTurns}）。最后状态：${lastSummary.slice(0, 200)}`;
     emit({
       type: "delegate_complete",
       status: "max_turns",

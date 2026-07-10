@@ -1,10 +1,10 @@
 import { Mastra } from "@mastra/core";
 
-import { prepareAgentShutdown } from "../agent/studio/shutdown.js";
+import { prepareAgentShutdown } from "../runtime/shutdown.js";
 import {
   closeStudioStorage,
   registerWorkStorageShutdownHooks,
-} from "../agent/studio/storage.js";
+} from "../storage/studio-storage.js";
 import { createLlmContextMiddleware } from "./middleware/llm-context.js";
 import { createStudioCors } from "./cors.js";
 import { createStudioRoutes } from "./routes/studio.js";

@@ -8,7 +8,7 @@ import { DEFAULT_DEEPSEEK_CHAT_MODEL } from "@story-studio/shared/mastra-headers
 import {
   CHAT_MODEL_CONTEXT,
   LLM_API_KEY_CONTEXT,
-} from "../../../mastra/middleware/llm-context.js";
+} from "../../mastra/middleware/llm-context.js";
 
 import { getLlmBaseUrl } from "./env.js";
 

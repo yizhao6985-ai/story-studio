@@ -10,14 +10,12 @@ import type {
   AgentActivityEvent,
   DelegateActivityEvent,
 } from "@story-studio/shared/activity";
-import { runDelegateSession } from "../../agent/studio/delegate.js";
-import {
-  syncConversationTitleFromMemory,
-} from "../../agent/studio/run.js";
+import { runDelegateSession } from "../../runtime/delegate.js";
+import { syncConversationTitleFromMemory } from "../../runtime/run.js";
 import {
   deleteWorkThread,
   ensureConversationThread,
-} from "../../agent/platform/mastra/lifecycle.js";
+} from "../../platform/lifecycle.js";
 import { getStudioMastra } from "../registry.js";
 
 type StudioChatBody = {

@@ -3,7 +3,7 @@ import { join } from "node:path";
 
 import { workUserDataDir } from "@story-studio/shared/paths";
 
-import { getUserDataRoot } from "./config.js";
+import { getUserDataRoot } from "./config.ts";
 
 export interface WorkUserMeta {
   displayTitle?: string;

@@ -1,4 +1,4 @@
-import { getChatModel, getLlmApiKey } from "../../agent/platform/llm/env.js";
+import { getChatModel, getLlmApiKey } from "../../platform/llm/env.js";
 
 const LLM_API_KEY_CONTEXT = "llm-api-key";
 const CHAT_MODEL_CONTEXT = "chat-model";

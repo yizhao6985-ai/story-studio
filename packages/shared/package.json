@@ -14,6 +14,7 @@
     ".": "./src/index.ts",
     "./activity": "./src/activity.ts",
     "./agent-types": "./src/agent-types.ts",
+    "./writing-types": "./src/writing-types.ts",
     "./story": "./src/story-types.ts",
     "./paths": "./src/paths.ts",
     "./llm-errors": "./src/llm-errors.ts",

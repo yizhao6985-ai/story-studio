@@ -1,8 +1,8 @@
 import type { RequestContext } from "@mastra/core/request-context";
 import { registerApiRoute } from "@mastra/core/server";
 
-import { setRuntimeConfig } from "../../agent/platform/runtime-config.js";
-import { getAgentContextUsage } from "../../agent/studio/run.js";
+import { setRuntimeConfig } from "../../platform/runtime-config.js";
+import { getAgentContextUsage } from "../../runtime/run.js";
 import { evictStudioMastra } from "../registry.js";
 import { createStudioChatRoutes } from "./studio-chat.js";
 

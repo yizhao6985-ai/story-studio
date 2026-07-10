@@ -22,7 +22,6 @@ let shutdownHooksRegistered = false;
 
 const STORE_CLOSE_RETRIES = 5;
 const STORE_CLOSE_RETRY_DELAY_MS = 400;
-/** 关闭前等待锁释放；默认 5s 在 dev 停止时经常不够。 */
 const STORE_CONNECTION_TIMEOUT_MS = 30_000;
 
 type LibSQLClient = {
@@ -64,7 +63,6 @@ function patchStoreClose(store: LibSQLStore): void {
 }
 
 function resolveObservabilityDbPath(filePath: string): string {
-  // mastra dev 热重载会直接 kill 子进程，文件型 DuckDB 锁来不及释放。
   if (process.env.MASTRA_DEV === "true") {
     return ":memory:";
   }

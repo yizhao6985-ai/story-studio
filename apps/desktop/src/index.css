@@ -224,6 +224,11 @@ select {
   letter-spacing: 0.12em;
 }
 
+.assistant-streaming-tail .assistant-markdown > :last-child {
+  display: inline;
+  margin-bottom: 0;
+}
+
 .message-loading-dots span {
   animation: loading-dot 1.2s ease-in-out infinite;
 }

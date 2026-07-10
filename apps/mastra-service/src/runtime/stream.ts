@@ -34,21 +34,15 @@ function pickToolPath(args: unknown): string | undefined {
 }
 
 const ARTIFACT_TOOL_IDS = new Set([
-  "patch_workspace_file",
-  "write_workspace_file",
-  "create_workspace_file",
-  "create_workspace_directory",
-  "delete_workspace_entry",
+  "mastra_workspace_edit_file",
+  "mastra_workspace_write_file",
+  "mastra_workspace_mkdir",
+  "mastra_workspace_delete",
 ]);
 
 function pickArtifactPath(toolName: string, args: unknown): string | undefined {
   if (!args || typeof args !== "object") return undefined;
   const record = args as Record<string, unknown>;
-  if (toolName === "rename_workspace_entry") {
-    return typeof record.toPath === "string" && record.toPath
-      ? record.toPath
-      : undefined;
-  }
   if (!ARTIFACT_TOOL_IDS.has(toolName)) return undefined;
   return typeof record.path === "string" && record.path ? record.path : undefined;
 }

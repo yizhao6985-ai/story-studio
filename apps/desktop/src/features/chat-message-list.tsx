@@ -9,16 +9,8 @@ type ChatMessageListProps = {
   status: string;
 };
 
-function RawMessagePart({ part }: { part: StudioUIMessage["parts"][number] }) {
-  if (part.type === "text") {
-    return part.text.trim() ? <MarkdownContent content={part.text} /> : null;
-  }
-
-  return (
-    <pre className="overflow-x-auto whitespace-pre-wrap break-words rounded-none border border-border/40 bg-muted/20 px-3 py-2 text-[11px] leading-relaxed text-foreground/90">
-      {JSON.stringify(part, null, 2)}
-    </pre>
-  );
+function TextMessagePart({ text }: { text: string }) {
+  return text.trim() ? <MarkdownContent content={text} /> : null;
 }
 
 function AssistantMessageBubble({
@@ -28,22 +20,40 @@ function AssistantMessageBubble({
   message: StudioUIMessage;
   streaming: boolean;
 }) {
-  const text = message.parts
-    .filter((part) => part.type === "text")
-    .map((part) => part.text)
-    .join("");
-  const hasRenderableParts = message.parts.some(
-    (part) => part.type !== "text" || part.text.trim(),
+  const textParts = message.parts.filter(
+    (part): part is Extract<StudioUIMessage["parts"][number], { type: "text" }> =>
+      part.type === "text",
   );
+  const text = textParts.map((part) => part.text).join("");
+  const hasText = text.trim().length > 0;
+  const trailingParts = textParts.slice(0, -1);
+  const lastTextPart = textParts.at(-1);
 
   return (
-    <div className="animate-fade-in max-w-[90%] self-start text-[13px] leading-[1.7]">
-      <div className="space-y-2 rounded-none border border-border/40 bg-card px-3.5 py-2.5 text-foreground">
-        {message.parts.map((part, index) => (
-          <RawMessagePart key={`${message.id}-${index}`} part={part} />
-        ))}
-        {!hasRenderableParts && streaming ? <MessageLoadingDots /> : null}
-        {!text.trim() && !streaming && !hasRenderableParts ? (
+    <div className="animate-fade-in w-full text-[13px] leading-[1.7] text-foreground">
+      <div className="space-y-2">
+        {streaming && hasText && lastTextPart ? (
+          <>
+            {trailingParts.map((part, index) => (
+              <TextMessagePart key={`${message.id}-${index}`} text={part.text} />
+            ))}
+            <div className="assistant-streaming-tail">
+              <TextMessagePart
+                key={`${message.id}-${textParts.length - 1}`}
+                text={lastTextPart.text}
+              />
+              <MessageLoadingDots inline className="ml-0.5" />
+            </div>
+          </>
+        ) : (
+          <>
+            {textParts.map((part, index) => (
+              <TextMessagePart key={`${message.id}-${index}`} text={part.text} />
+            ))}
+            {streaming ? <MessageLoadingDots /> : null}
+          </>
+        )}
+        {!hasText && !streaming ? (
           <span className="text-muted-foreground">（无内容）</span>
         ) : null}
       </div>

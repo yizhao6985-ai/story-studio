@@ -2,23 +2,52 @@ import { Mastra, type Config } from "@mastra/core";
 
 type MastraServerConfig = NonNullable<Config["server"]>;
 
-import { createStudioMemory } from "../agent/studio/memory.js";
-import { getStudioObservability } from "../agent/studio/observability.js";
-import { createSupervisorAgent } from "../agent/studio/agents/supervisor.js";
-import { getStudioStorage } from "../agent/studio/storage.js";
+import { createStoryChatAgent } from "../agents/story-chat/index.js";
+import { createStorySupervisorAgent } from "../agents/story-supervisor/index.js";
+import { createWritingPlannerAgent } from "../agents/writing-planner/index.js";
+import { createWritingSupervisorAgent } from "../agents/writing-supervisor/index.js";
+import { createWritingEditorAgent } from "../agents/writing-supervisor/subagents/editor.js";
+import { createWritingExplorerAgent } from "../agents/writing-supervisor/subagents/explorer.js";
+import { createWritingVerifierAgent } from "../agents/writing-supervisor/subagents/verifier.js";
+import { createWritingWriterAgent } from "../agents/writing-supervisor/subagents/writer.js";
+import { createStudioMemory } from "../memory/studio-memory.js";
+import { getStudioObservability } from "../observability/studio-observability.js";
+import { getStudioStorage } from "../storage/studio-storage.js";
+import { createWritingWorkflow } from "../workflows/writing/index.js";
 
 let studioMastra: Mastra | null = null;
 
 export function createStudioMastra(server?: MastraServerConfig): Mastra {
   const storage = getStudioStorage();
   const memory = createStudioMemory(storage);
-  const storySupervisor = createSupervisorAgent(memory);
+  const writingWorkflow = createWritingWorkflow();
+
+  const storyChat = createStoryChatAgent();
+  const writingPlanner = createWritingPlannerAgent();
+  const writingExplorer = createWritingExplorerAgent();
+  const writingEditor = createWritingEditorAgent();
+  const writingWriter = createWritingWriterAgent();
+  const writingVerifier = createWritingVerifierAgent();
+  const writingSupervisor = createWritingSupervisorAgent();
+  const storySupervisor = createStorySupervisorAgent(memory, writingWorkflow);
 
   return new Mastra({
     storage,
     observability: getStudioObservability(),
     memory: { studio: memory },
-    agents: { storySupervisor },
+    agents: {
+      storySupervisor,
+      storyChat,
+      writingPlanner,
+      writingExplorer,
+      writingEditor,
+      writingWriter,
+      writingVerifier,
+      writingSupervisor,
+    },
+    workflows: {
+      writing: writingWorkflow,
+    },
     ...(server ? { server } : {}),
   });
 }

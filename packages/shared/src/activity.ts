@@ -1,4 +1,4 @@
-import type { DelegateSessionStatus } from "./agent-types.js";
+import type { DelegateSessionStatus } from "./agent-types.ts";
 
 export type AgentActivityEvent =
   | { type: "status"; status: "thinking" | "executing" }

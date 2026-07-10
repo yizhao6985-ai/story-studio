@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import {
   mkdir,
   readFile,
@@ -9,16 +8,17 @@ import {
 } from "node:fs/promises";
 import { dirname, join } from "node:path";
 
-import { initGitRepo } from "./git.js";
-import { isProtectedWorkspacePath } from "./protected-paths.js";
+import { initGitRepo } from "./git.ts";
+import { isProtectedWorkspacePath } from "./protected-paths.ts";
 import {
   assertParentDirectorySegments,
   assertWorkspaceDirectorySegments,
   assertWorkspaceEntryName,
   isTextFile,
+  normalizeWorkspaceRelativePath,
   resolveWorkspaceFilePath,
-} from "./paths.js";
-import { bumpWorkManifest } from "./work-meta.js";
+} from "./paths.ts";
+import { bumpWorkManifest } from "./work-meta.ts";
 
 async function ensureGitOnFirstWrite(workPath: string): Promise<void> {
   try {
@@ -40,25 +40,9 @@ function assertNotProtected(
 
 const DEFAULT_READ_MAX_LINES = 200;
 
-export function hashWorkspaceContent(content: string): string {
-  return createHash("sha256").update(content).digest("hex").slice(0, 16);
-}
-
-export async function workspaceFileExists(
-  workPath: string,
-  relativePath: string,
-): Promise<boolean> {
-  try {
-    await stat(resolveWorkspaceFilePath(workPath, relativePath));
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 export async function readWorkWorkspaceFile(
   workPath: string,
-  relativePath: string,
+  inputPath: string,
   options?: { startLine?: number; endLine?: number },
 ): Promise<{
   path: string;
@@ -69,6 +53,7 @@ export async function readWorkWorkspaceFile(
   totalLines: number;
   hasMore: boolean;
 }> {
+  const relativePath = normalizeWorkspaceRelativePath(workPath, inputPath);
   const absPath = resolveWorkspaceFilePath(workPath, relativePath);
   const name = relativePath.split("/").pop() ?? relativePath;
 
@@ -108,35 +93,12 @@ export async function readWorkWorkspaceFile(
   };
 }
 
-export async function patchWorkWorkspaceFile(
-  workPath: string,
-  relativePath: string,
-  oldText: string,
-  newText: string,
-): Promise<{ replaced: boolean; occurrences: number }> {
-  const absPath = resolveWorkspaceFilePath(workPath, relativePath);
-  const name = relativePath.split("/").pop() ?? relativePath;
-  if (!isTextFile(name)) throw new Error("FILE_NOT_WRITABLE");
-
-  const fullContent = await readFile(absPath, "utf8");
-  const occurrences = fullContent.split(oldText).length - 1;
-  if (occurrences === 0) {
-    return { replaced: false, occurrences: 0 };
-  }
-
-  const updated = fullContent.replace(oldText, newText);
-  await writeFile(absPath, updated, "utf8");
-  await ensureGitOnFirstWrite(workPath);
-  await bumpWorkManifest(workPath);
-
-  return { replaced: true, occurrences };
-}
-
 export async function writeWorkWorkspaceFile(
   workPath: string,
-  relativePath: string,
+  inputPath: string,
   content: string,
 ): Promise<void> {
+  const relativePath = normalizeWorkspaceRelativePath(workPath, inputPath);
   const absPath = resolveWorkspaceFilePath(workPath, relativePath);
   const name = relativePath.split("/").pop() ?? relativePath;
 
@@ -153,9 +115,10 @@ export async function writeWorkWorkspaceFile(
 
 export async function createWorkWorkspaceFile(
   workPath: string,
-  relativePath: string,
+  inputPath: string,
   content = "",
 ): Promise<void> {
+  const relativePath = normalizeWorkspaceRelativePath(workPath, inputPath);
   const name = relativePath.split("/").pop() ?? relativePath;
   assertWorkspaceEntryName(name);
 
@@ -173,8 +136,9 @@ export async function createWorkWorkspaceFile(
 
 export async function createWorkWorkspaceDirectory(
   workPath: string,
-  relativePath: string,
+  inputPath: string,
 ): Promise<void> {
+  const relativePath = normalizeWorkspaceRelativePath(workPath, inputPath);
   assertWorkspaceDirectorySegments(relativePath);
 
   const absPath = resolveWorkspaceFilePath(workPath, relativePath);
@@ -184,8 +148,9 @@ export async function createWorkWorkspaceDirectory(
 
 export async function deleteWorkWorkspaceEntry(
   workPath: string,
-  relativePath: string,
+  inputPath: string,
 ): Promise<void> {
+  const relativePath = normalizeWorkspaceRelativePath(workPath, inputPath);
   assertNotProtected(relativePath, "delete");
   const absPath = resolveWorkspaceFilePath(workPath, relativePath);
   await rm(absPath, { recursive: true, force: false });
@@ -194,9 +159,11 @@ export async function deleteWorkWorkspaceEntry(
 
 export async function renameWorkWorkspaceEntry(
   workPath: string,
-  fromPath: string,
-  toPath: string,
+  fromInputPath: string,
+  toInputPath: string,
 ): Promise<void> {
+  const fromPath = normalizeWorkspaceRelativePath(workPath, fromInputPath);
+  const toPath = normalizeWorkspaceRelativePath(workPath, toInputPath);
   assertNotProtected(fromPath, "rename");
   const nextName = toPath.split("/").pop() ?? toPath;
   assertWorkspaceEntryName(nextName);

@@ -1,4 +1,4 @@
-import { getStudioMastra } from "../../../mastra/registry.js";
+import { getStudioMastra } from "../mastra/registry.js";
 
 export async function ensureConversationThread(
   workPath: string,

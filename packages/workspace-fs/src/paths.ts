@@ -1,4 +1,4 @@
-import { resolve } from "node:path";
+import { isAbsolute, relative, resolve } from "node:path";
 
 export const TEXT_EXTENSIONS = new Set([
   ".md",
@@ -15,11 +15,8 @@ export function isTextFile(name: string): boolean {
   return TEXT_EXTENSIONS.has(name.slice(dot).toLowerCase());
 }
 
-export function resolveWorkspaceFilePath(
-  workPath: string,
-  relativePath: string,
-): string {
-  const segments = relativePath.replace(/^\/+/, "").split("/").filter(Boolean);
+function assertRelativeWorkspaceSegments(relativePath: string): string {
+  const segments = relativePath.split("/").filter(Boolean);
 
   if (
     segments.length === 0 ||
@@ -28,8 +25,58 @@ export function resolveWorkspaceFilePath(
     throw new Error("INVALID_WORKSPACE_PATH");
   }
 
-  const absPath = resolve(workPath, ...segments);
+  return segments.join("/");
+}
+
+/** 将工具入参（相对或误传的绝对路径）规范为作品库内相对路径。 */
+export function normalizeWorkspaceRelativePath(
+  workPath: string,
+  inputPath: string,
+): string {
+  const trimmed = inputPath.trim();
+  if (!trimmed) {
+    throw new Error("INVALID_WORKSPACE_PATH");
+  }
+
   const root = resolve(workPath);
+
+  const fromAbsolute = (absPath: string): string => {
+    const resolved = resolve(absPath);
+    if (resolved === root || !resolved.startsWith(`${root}/`)) {
+      throw new Error("INVALID_WORKSPACE_PATH");
+    }
+    return assertRelativeWorkspaceSegments(relative(root, resolved));
+  };
+
+  if (isAbsolute(trimmed)) {
+    return fromAbsolute(trimmed);
+  }
+
+  if (trimmed.startsWith(root)) {
+    return assertRelativeWorkspaceSegments(
+      trimmed.slice(root.length).replace(/^[/\\]+/, ""),
+    );
+  }
+
+  // POSIX 上 agent 可能传入缺少前导 / 的绝对路径，如 Users/yi/Projects/...
+  if (process.platform !== "win32") {
+    const posixAbs = resolve(`/${trimmed.replace(/^\/+/, "")}`);
+    if (posixAbs.startsWith(`${root}/`)) {
+      return fromAbsolute(posixAbs);
+    }
+  }
+
+  return assertRelativeWorkspaceSegments(trimmed.replace(/^[/\\]+/, ""));
+}
+
+export function resolveWorkspaceFilePath(
+  workPath: string,
+  inputPath: string,
+): string {
+  const relativePath = normalizeWorkspaceRelativePath(workPath, inputPath);
+  const root = resolve(workPath);
+  const absPath = resolve(root, relativePath);
+
   if (absPath !== root && !absPath.startsWith(`${root}/`)) {
     throw new Error("INVALID_WORKSPACE_PATH");
   }

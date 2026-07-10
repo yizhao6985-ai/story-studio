@@ -4,7 +4,7 @@ import { join } from "node:path";
 import type { ConversationManifest } from "@story-studio/shared/story";
 import { workConversationsDir } from "@story-studio/shared/paths";
 
-import { getUserDataRoot } from "./config.js";
+import { getUserDataRoot } from "./config.ts";
 
 function conversationsIndexPath(workPath: string): string {
   return join(workConversationsDir(getUserDataRoot(), workPath), "index.json");

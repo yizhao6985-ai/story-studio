@@ -13,12 +13,9 @@ import {
   toAgentRunError,
 } from "@story-studio/shared/llm-errors";
 import { updateConversationTitle } from "@story-studio/workspace-fs";
-import { ensureConversationThread } from "../platform/mastra/lifecycle.js";
-import { getStudioMastra } from "../../mastra/registry.js";
-import {
-  createStreamSink,
-  handleStreamChunk,
-} from "./stream.js";
+import { ensureConversationThread } from "../platform/lifecycle.js";
+import { getStudioMastra } from "../mastra/registry.js";
+import { createStreamSink, handleStreamChunk } from "./stream.js";
 import type {
   AgentRunResult,
   ChatMessage,
@@ -199,7 +196,6 @@ export async function syncConversationTitleFromMemory(input: {
   const memory = await mastra.getAgent("storySupervisor").getMemory();
   if (!memory) return;
 
-  // Memory.generateTitle 在回复后异步运行，短暂轮询等待标题写入。
   for (let attempt = 0; attempt < 6; attempt++) {
     const thread = await memory.getThreadById({
       threadId: input.conversationId,
