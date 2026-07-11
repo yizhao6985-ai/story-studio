@@ -6,7 +6,6 @@ import {
   setWorkDisplayTitle,
 } from "@story-studio/workspace-fs";
 import type { WorkSnapshot } from "../../src/lib/story/types.js";
-import { prepareConversationStore } from "./conversation-store.js";
 import { readReadme, updateReadmeTitle } from "./readme.js";
 
 async function resolveWorkTitle(workPath: string): Promise<string> {
@@ -47,7 +46,6 @@ export async function initWorkspaceAtPath(
   title?: string,
 ): Promise<string> {
   await mkdir(workPath, { recursive: true });
-  await prepareConversationStore(workPath);
   if (title?.trim()) {
     await setWorkDisplayTitle(workPath, title.trim());
   }

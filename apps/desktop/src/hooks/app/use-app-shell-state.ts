@@ -13,27 +13,20 @@ import { useAppKeyboardShortcuts } from "@/hooks/keyboard/use-app-keyboard-short
 import { useSidebarPanelCollapse } from "@/hooks/layout/use-sidebar-panel-collapse";
 import { useWorkspacePanelCollapse } from "@/hooks/layout/use-workspace-panel-collapse";
 import { useSidebarWorkspaces } from "@/hooks/workspace/use-sidebar-workspaces";
-import { useStudioChat } from "@/hooks/chat/use-studio-chat";
-import type {
-  AgentMode,
-  ComposerMode,
-  DelegateSessionInfo,
-  WorkspaceEntry,
-} from "@/hooks/types";
-import { DEFAULT_DELEGATE_MAX_TURNS } from "@/hooks/types";
+import { useLangGraphChat } from "@/hooks/chat/use-langgraph-chat";
+import type { AgentMode, WorkspaceEntry } from "@/hooks/types";
 import type { WorkspaceSidebarEntry } from "@/features/workspace-sidebar";
-import type { ContextUsageInfo } from "@/features/context-usage-meter";
 import type { SettingsSectionId } from "@/features/settings/settings-sections";
 import {
   OPEN_SETTINGS_EVENT,
   type OpenSettingsDetail,
 } from "@/lib/settings-navigation";
 import {
-  loadChatMessages,
-  getContextUsage,
-  ensureThread,
-  deleteThread,
-} from "@/lib/mastra";
+  createConversation,
+  deleteConversation,
+  getThreadMetadata,
+  listConversations,
+} from "@/lib/langgraph";
 
 export function useAppShellState() {
   const [activeWorkspace, setActiveWorkspace] = useState<WorkSnapshot | null>(null);
@@ -42,11 +35,8 @@ export function useAppShellState() {
   >({});
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
   const [input, setInput] = useState("");
-  const [mode, setMode] = useState<ComposerMode>("normal");
-  const [delegateMaxTurns, setDelegateMaxTurns] = useState(DEFAULT_DELEGATE_MAX_TURNS);
-  const [delegateSession, setDelegateSession] = useState<DelegateSessionInfo | null>(
-    null,
-  );
+  const [mode, setModeState] = useState<AgentMode>("normal");
+  const [modeLocked, setModeLocked] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [settingsSectionId, setSettingsSectionId] =
     useState<SettingsSectionId>("appearance");
@@ -54,7 +44,6 @@ export function useAppShellState() {
   const [createWorkspaceOpen, setCreateWorkspaceOpen] = useState(false);
   const [llmError, setLlmError] = useState<LlmErrorDisplay | null>(null);
   const [appNotice, setAppNotice] = useState("");
-  const [contextUsage, setContextUsage] = useState<ContextUsageInfo | null>(null);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const sidebarMeasureRef = useRef<HTMLDivElement>(null);
@@ -76,7 +65,7 @@ export function useAppShellState() {
   const sidebarPanel = useSidebarPanelCollapse();
 
   const loadConversationsFor = useCallback(async (workPath: string) => {
-    const list = await window.storyStudio.library.listConversations(workPath);
+    const list = await listConversations(workPath);
     setConversationsMap((prev) => ({ ...prev, [workPath]: list }));
     return list;
   }, []);
@@ -84,7 +73,7 @@ export function useAppShellState() {
   const refreshAllConversations = useCallback(async (entries: WorkspaceEntry[]) => {
     const pairs = await Promise.all(
       entries.map(async ({ workPath }) => {
-        const list = await window.storyStudio.library.listConversations(workPath);
+        const list = await listConversations(workPath);
         return [workPath, list] as const;
       }),
     );
@@ -99,94 +88,39 @@ export function useAppShellState() {
     refreshAllConversations,
   ]);
 
-  const agentModeForContext: AgentMode = mode === "delegate" ? "normal" : mode;
-
-  const refreshContextUsage = useCallback(
-    async (draftMessage?: string) => {
-      const workPath = activeWorkspace?.workPath;
-      if (!workPath || !activeConversationId) {
-        setContextUsage(null);
-        return;
-      }
-
-      try {
-        const usage = await getContextUsage({
-          workPath,
-          conversationId: activeConversationId,
-          mode: agentModeForContext,
-          draftMessage: draftMessage ?? "",
-        });
-        setContextUsage({
-          percent: usage.percent,
-          usedTokens: usage.usedTokens,
-          budgetTokens: usage.maxTokens,
-          hasSummary: false,
-          modelLabel: usage.modelLabel,
-        });
-      } catch {
-        setContextUsage(null);
-      }
-    },
-    [activeWorkspace?.workPath, activeConversationId, agentModeForContext],
-  );
-
   const refreshWorkspaceAfterChat = useCallback(async () => {
     const workPath = activeWorkspace?.workPath;
     if (!workPath || !activeConversationId) return;
 
-    await window.storyStudio.library.touchConversation(
-      workPath,
-      activeConversationId,
-    );
     const snap = await window.storyStudio.library.openWork(workPath);
     setActiveWorkspace(snap);
     cacheManifest(workPath, snap.manifest);
     await loadConversationsFor(workPath);
-    void refreshContextUsage();
   }, [
     activeWorkspace?.workPath,
     activeConversationId,
     cacheManifest,
     loadConversationsFor,
-    refreshContextUsage,
   ]);
 
   const {
     messages,
-    setMessages,
     sendMessage,
     stop,
     status,
     loading,
     error: chatError,
-  } = useStudioChat({
+  } = useLangGraphChat({
     workPath: activeWorkspace?.workPath,
-    conversationId: activeConversationId ?? undefined,
+    threadId: activeConversationId ?? undefined,
     mode,
-    delegateMaxTurns,
     onFinish: () => {
       void refreshWorkspaceAfterChat();
-      setDelegateSession(null);
     },
     onError: (error) => {
       const resolved = resolveRunFailure(error);
       if (resolved.llm) setLlmError(resolved.llm);
       if (resolved.appNotice) setAppNotice(resolved.appNotice);
-      setDelegateSession(null);
-    },
-    onData: (part) => {
-      if (part.type === "data-delegate-status") {
-        setDelegateSession({
-          status: "running",
-          turn: part.data.turn,
-          maxTurns: part.data.maxTurns,
-          artifactPaths: part.data.artifactPaths,
-          goal: part.data.goal,
-        });
-      }
-      if (part.type === "data-delegate-complete") {
-        setDelegateSession(null);
-      }
     },
   });
 
@@ -198,40 +132,23 @@ export function useAppShellState() {
     }
   }, [chatError]);
 
-  useEffect(() => {
-    void refreshContextUsage(input);
-  }, [activeConversationId, activeWorkspace?.workPath, agentModeForContext]);
-
-  useEffect(() => {
-    const timer = window.setTimeout(() => {
-      void refreshContextUsage(input);
-    }, 300);
-    return () => window.clearTimeout(timer);
-  }, [input, refreshContextUsage]);
-
-  const loadConversationMessages = useCallback(
-    async (workPath: string, conversationId: string) => {
-      const key = `${workPath}\0${conversationId}`;
-      setMessages([]);
-      try {
-        const history = await loadChatMessages({ workPath, conversationId });
-        if (activeConversationKeyRef.current !== key) return;
-        setMessages(history);
-      } catch {
-        if (activeConversationKeyRef.current !== key) return;
-        setMessages([]);
-      }
-    },
-    [setMessages],
-  );
-
   const activateConversation = useCallback(
     async (workPath: string, conversationId: string) => {
       const key = `${workPath}\0${conversationId}`;
       activeConversationKeyRef.current = key;
-      setMessages([]);
       setActiveConversationId(conversationId);
       saveAppSession({ workPath, conversationId });
+
+      const metadata = await getThreadMetadata(conversationId);
+      if (metadata) {
+        if (metadata.workPath !== workPath) {
+          throw new Error("THREAD_WORKSPACE_MISMATCH");
+        }
+        setModeState(metadata.mode);
+        setModeLocked(true);
+      } else {
+        setModeLocked(false);
+      }
 
       const snap = await window.storyStudio.library.openWork(workPath);
       if (activeConversationKeyRef.current !== key) return;
@@ -239,9 +156,16 @@ export function useAppShellState() {
       cacheManifest(workPath, snap.manifest);
       setActiveWorkspace(snap);
       expandWorkspace(workPath);
-      await loadConversationMessages(workPath, conversationId);
     },
-    [cacheManifest, expandWorkspace, loadConversationMessages, setMessages],
+    [cacheManifest, expandWorkspace],
+  );
+
+  const setMode = useCallback(
+    (nextMode: AgentMode) => {
+      if (modeLocked && activeConversationId) return;
+      setModeState(nextMode);
+    },
+    [modeLocked, activeConversationId],
   );
 
   useEffect(() => {
@@ -325,7 +249,7 @@ export function useAppShellState() {
     (defaultWorkPath?: string) => {
       setComposeDefaultWorkPath(defaultWorkPath);
       setActiveConversationId(null);
-      setMessages([]);
+      setModeLocked(false);
       if (defaultWorkPath) {
         void window.storyStudio.library.openWork(defaultWorkPath).then((snap) => {
           setActiveWorkspace(snap);
@@ -335,7 +259,7 @@ export function useAppShellState() {
         setActiveWorkspace(null);
       }
     },
-    [cacheManifest, setMessages],
+    [cacheManifest],
   );
 
   const closeComposeConversation = useCallback(() => {
@@ -375,37 +299,14 @@ export function useAppShellState() {
 
       setLlmError(null);
       setAppNotice("");
-
-      if (mode === "delegate") {
-        setDelegateSession({
-          status: "running",
-          turn: 0,
-          maxTurns: delegateMaxTurns,
-          artifactPaths: [],
-          goal: trimmed,
-        });
-      }
-
-      await sendMessage({ text: trimmed });
+      await sendMessage(trimmed);
     },
-    [
-      activeWorkspace?.workPath,
-      activeConversationId,
-      loading,
-      mode,
-      delegateMaxTurns,
-      sendMessage,
-    ],
+    [activeWorkspace?.workPath, activeConversationId, loading, sendMessage],
   );
 
   const startNewConversation = useCallback(
     async (workPath: string, initialMessage: string) => {
-      const created = await window.storyStudio.library.createConversation(workPath);
-      await ensureThread({
-        workPath,
-        conversationId: created.id,
-        title: created.title,
-      });
+      const created = await createConversation(workPath, mode);
       await loadConversationsFor(workPath);
       await activateConversation(workPath, created.id);
       setComposeDefaultWorkPath(undefined);
@@ -414,7 +315,7 @@ export function useAppShellState() {
         await submitChatText(initialMessage, workPath, created.id);
       }
     },
-    [loadConversationsFor, activateConversation, submitChatText],
+    [loadConversationsFor, activateConversation, submitChatText, mode],
   );
 
   const send = useCallback(async () => {
@@ -505,16 +406,14 @@ export function useAppShellState() {
     [closeSettings, activateConversation],
   );
 
-  const deleteConversation = useCallback(
+  const deleteConversationById = useCallback(
     async (workPath: string, conversationId: string) => {
-      await deleteThread({ workPath, threadId: conversationId });
-      await window.storyStudio.library.deleteConversation(workPath, conversationId);
+      await deleteConversation(conversationId);
       await loadConversationsFor(workPath);
 
       if (activeConversationId !== conversationId) return;
 
       setActiveConversationId(null);
-      setMessages([]);
       setInput("");
       setLlmError(null);
       setAppNotice("");
@@ -524,12 +423,7 @@ export function useAppShellState() {
         setComposeDefaultWorkPath(workPath);
       }
     },
-    [
-      activeConversationId,
-      activeWorkspace?.workPath,
-      loadConversationsFor,
-      setMessages,
-    ],
+    [activeConversationId, activeWorkspace?.workPath, loadConversationsFor],
   );
 
   const removeWorkspace = useCallback(
@@ -545,7 +439,6 @@ export function useAppShellState() {
       if (activeWorkspace?.workPath === workPath) {
         setActiveWorkspace(null);
         setActiveConversationId(null);
-        setMessages([]);
         setInput("");
         setLlmError(null);
         setAppNotice("");
@@ -556,12 +449,7 @@ export function useAppShellState() {
         setComposeDefaultWorkPath(undefined);
       }
     },
-    [
-      removeWorkspaceFromSidebar,
-      activeWorkspace?.workPath,
-      composeDefaultWorkPath,
-      setMessages,
-    ],
+    [removeWorkspaceFromSidebar, activeWorkspace?.workPath, composeDefaultWorkPath],
   );
 
   return {
@@ -577,8 +465,7 @@ export function useAppShellState() {
     activeConversationId,
     mode,
     setMode,
-    delegateMaxTurns,
-    setDelegateMaxTurns,
+    modeLocked,
     input,
     setInput,
     chatMessages: messages,
@@ -592,8 +479,6 @@ export function useAppShellState() {
     setCreateWorkspaceOpen,
     llmError,
     appNotice,
-    contextUsage,
-    delegateSession,
     shortcutsOpen,
     setShortcutsOpen,
     conversationContextLabel,
@@ -611,7 +496,7 @@ export function useAppShellState() {
     openQuickSettings,
     closeSettings,
     selectConversation,
-    deleteConversation,
+    deleteConversation: deleteConversationById,
     removeWorkspace,
   };
 }

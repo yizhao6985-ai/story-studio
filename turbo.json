@@ -4,10 +4,10 @@
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
-      "outputs": ["dist/**", "dist-electron/**", ".mastra/**"]
+      "outputs": ["dist/**", "dist-electron/**"]
     },
     "package": {
-      "dependsOn": ["@story-studio/mastra-service#build", "build"],
+      "dependsOn": ["@story-studio/langgraph-service#build", "build"],
       "outputs": ["release/**"]
     },
     "check-types": {

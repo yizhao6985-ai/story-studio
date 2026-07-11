@@ -6,7 +6,6 @@ import {
   ComposerModeSelector,
   cycleComposerMode,
 } from "@/features/composer-mode-selector";
-import { DelegateMaxTurnsControl } from "@/features/delegate-max-turns-control";
 import { WorkspaceSelector, type WorkspaceOption } from "@/features/workspace-selector";
 import type { ComposerMode } from "@/hooks/types";
 import { cn } from "@/lib/utils";
@@ -18,8 +17,6 @@ type CreateConversationComposerProps = {
   defaultWorkPath?: string;
   mode: ComposerMode;
   onModeChange: (mode: ComposerMode) => void;
-  delegateMaxTurns: number;
-  onDelegateMaxTurnsChange: (maxTurns: number) => void;
   onCreateWorkspace: () => void;
   onWorkspaceChange?: (workPath: string) => void;
   onCreate: (workPath: string, initialMessage: string) => Promise<void>;
@@ -32,8 +29,6 @@ export function CreateConversationComposer({
   defaultWorkPath,
   mode,
   onModeChange,
-  delegateMaxTurns,
-  onDelegateMaxTurnsChange,
   onCreateWorkspace,
   onWorkspaceChange,
   onCreate,
@@ -88,12 +83,9 @@ export function CreateConversationComposer({
   }, [onCancel]);
 
   const canCreate = workspaces.some((item) => item.workPath === workPath);
-  const isDelegateMode = mode === "delegate";
   const placeholder = !canCreate
     ? "请先选择或创建工作空间"
-    : isDelegateMode
-      ? "描述托管目标，例如：完善第三章并写入文件…"
-      : "对 Story Studio 说点什么，开始这段对话…";
+    : "对 Story Studio 说点什么，开始这段对话…";
 
   const handleSubmit = async () => {
     if (!canCreate) {
@@ -169,14 +161,8 @@ export function CreateConversationComposer({
                 className="size-7 shrink-0 rounded-none"
                 onClick={() => void handleSubmit()}
                 disabled={loading || !canCreate}
-                aria-label={loading ? "创建中" : isDelegateMode ? "开始托管" : "开始对话"}
-                title={
-                  loading
-                    ? "创建中"
-                    : isDelegateMode
-                      ? "开始托管 (Enter)"
-                      : "开始对话 (Enter)"
-                }
+                aria-label={loading ? "创建中" : "开始对话"}
+                title={loading ? "创建中" : "开始对话 (Enter)"}
               >
                 {loading ? (
                   <Loader2 className="size-3.5 animate-spin" strokeWidth={2} />
@@ -187,23 +173,11 @@ export function CreateConversationComposer({
             </div>
           </div>
 
-          <div className="flex w-full items-center justify-between gap-2">
-            <div className="flex min-w-0 items-center gap-1.5">
-              <ComposerModeSelector
-                mode={mode}
-                onModeChange={onModeChange}
-                disabled={loading}
-              />
-              {isDelegateMode ? (
-                <DelegateMaxTurnsControl
-                  value={delegateMaxTurns}
-                  onChange={onDelegateMaxTurnsChange}
-                  disabled={loading}
-                />
-              ) : null}
-            </div>
-            <div className="flex min-w-0 items-center gap-2" />
-          </div>
+          <ComposerModeSelector
+            mode={mode}
+            onModeChange={onModeChange}
+            disabled={loading}
+          />
         </div>
       </div>
     </section>

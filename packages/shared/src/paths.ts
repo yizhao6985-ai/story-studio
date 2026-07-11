@@ -26,7 +26,7 @@ export function workConversationsDir(
   return join(workUserDataDir(userDataRoot, workPath), "conversations");
 }
 
-/** 全局 Mastra Memory / Agent 存储（所有作品共用，按 resourceId 隔离 thread）。 */
+/** 全局 Agent 对话存储（所有作品共用，按 resourceId 隔离 thread）。 */
 export function studioAgentDbPath(userDataRoot: string): string {
   return join(userDataRoot, "agent.sqlite");
 }

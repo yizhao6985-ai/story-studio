@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "turbo run dev",
     "dev:desktop": "turbo run dev --filter=@story-studio/desktop",
-    "dev:mastra": "turbo run dev --filter=@story-studio/mastra-service",
+    "dev:agent": "turbo run dev --filter=@story-studio/langgraph-service",
     "build": "turbo run build",
     "package:desktop": "turbo run package --filter=@story-studio/desktop",
     "check-types": "turbo run check-types",

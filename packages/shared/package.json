@@ -15,9 +15,10 @@
     "./activity": "./src/activity.ts",
     "./agent-types": "./src/agent-types.ts",
     "./writing-types": "./src/writing-types.ts",
+    "./task-types": "./src/task-types.ts",
     "./story": "./src/story-types.ts",
     "./paths": "./src/paths.ts",
     "./llm-errors": "./src/llm-errors.ts",
-    "./mastra-headers": "./src/mastra-headers.ts"
+    "./llm-config": "./src/llm-config.ts"
   }
 }

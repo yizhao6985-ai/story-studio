@@ -9,6 +9,21 @@ contextBridge.exposeInMainWorld("storyStudio", {
       ipcRenderer.invoke("app:getUserDataPath") as Promise<string>,
   },
 
+  studio: {
+    getLangGraphApiUrl: () =>
+      ipcRenderer.invoke("studio:getLangGraphApiUrl") as Promise<string | null>,
+    getServiceStatus: () =>
+      ipcRenderer.invoke("studio:getServiceStatus") as Promise<{
+        mcp: { ok: boolean; url: string };
+        langgraph: { ok: boolean; url: string | null; embedded: boolean };
+      }>,
+    waitForServices: () =>
+      ipcRenderer.invoke("studio:waitForServices") as Promise<{
+        mcp: { ok: boolean; url: string };
+        langgraph: { ok: boolean; url: string | null; embedded: boolean };
+      }>,
+  },
+
   library: {
     pickDirectory: () => ipcRenderer.invoke("library:pickDirectory"),
     createWorkspace: (directoryPath: string, title: string) =>
@@ -20,22 +35,6 @@ contextBridge.exposeInMainWorld("storyStudio", {
       ipcRenderer.invoke("library:addWork", workPath),
     removeWork: (workPath: string) =>
       ipcRenderer.invoke("library:removeWork", workPath),
-    listConversations: (workPath: string) =>
-      ipcRenderer.invoke("library:listConversations", workPath),
-    createConversation: (workPath: string, title?: string) =>
-      ipcRenderer.invoke("library:createConversation", workPath, title),
-    deleteConversation: (workPath: string, conversationId: string) =>
-      ipcRenderer.invoke(
-        "library:deleteConversation",
-        workPath,
-        conversationId,
-      ),
-    touchConversation: (workPath: string, conversationId: string) =>
-      ipcRenderer.invoke(
-        "library:touchConversation",
-        workPath,
-        conversationId,
-      ),
     listWorkFileTree: (workPath: string) =>
       ipcRenderer.invoke("library:listWorkFileTree", workPath),
     readWorkspaceFile: (workPath: string, relativePath: string) =>

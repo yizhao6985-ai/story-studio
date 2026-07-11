@@ -1,116 +1,85 @@
 # Story Studio
 
-AI 桌面故事创作工具：本地作品库 + Git 版本 + 多模式 AI 协作（提问 / 创作 / 托管）。
+AI 桌面故事创作工具：本地作品库 + Git 版本 + 多模式 AI 协作（提问 / 创作）。
 
 ## Monorepo 结构
 
 ```
 story-studio/
 ├── apps/
-│   ├── desktop/          # Electron 桌面客户端 (:5175)
-│   └── mastra-service/   # 独立 Mastra Agent 服务 (:4111)
+│   ├── desktop/            # Electron 桌面客户端 (:5175)
+│   │   └── electron/mcp/   # 本地 MCP 文件服务 (:3100)
+│   └── langgraph-service/  # LangGraph 官方 API (:2024)
 ├── packages/
-│   ├── shared/           # 共享类型与工具
-│   └── workspace-fs/     # 作品目录读写（Mastra 与 Electron 共用）
-├── turbo.json            # Turborepo 任务编排
-├── pnpm-workspace.yaml
-└── package.json
+│   ├── shared/
+│   └── workspace-fs/
+└── ...
 ```
 
 ## 架构
 
 ```
-Renderer ──IPC──► Electron Main ──HTTP/NDJSON──► Mastra Service (/mastra)
-Mastra Service ──直接 fs──► 作品目录 (workPath)
-Electron Main ──IPC──► workspace-fs ──► 作品目录 (编辑器)
+Renderer ──useStream──► langgraph dev (:2024)
+                              │
+                              └── MCP HTTP + Bearer token
+                                    └── Electron MCP (:3100/mcp)
+                                          └── workspace-fs (workPath 经请求头注入)
+
+对话列表 / checkpoint ── LangGraph threads API（metadata: workPath, mode, title）
+文件读写 ── Electron MCP（LangGraph 通过 configurable.workPath → MCP 请求头）
 ```
 
-- **Mastra Service**（`apps/mastra-service`）：独立进程，Agent 编排、Memory、Streaming、Tool 执行；API 前缀 `/mastra`；LLM 凭据通过本地环境变量配置
-- **Electron Main**（`apps/desktop`）：IPC 网关、Mastra HTTP 代理、原生能力（目录选择、窗口）
-- **workspace-fs**（`packages/workspace-fs`）：作品目录读写，Mastra tools 与 Electron 编辑器共用
-- **Renderer**：纯 UI，不直接访问 Agent 或文件系统
-- **Shared**（`packages/shared`）：跨 app 共享的类型与工具
+**Electron 一体化启动**：打开 Desktop 时会自动启动 MCP 与 LangGraph 子进程（若 :2024 已有服务则复用，适用于 `pnpm dev` 并行模式）。
 
 ## 快速开始
 
 ```bash
 pnpm install
-pnpm dev          # 并行启动 Mastra Service + Electron
+
+# 配置 LLM Key
+cp apps/langgraph-service/.env.example apps/langgraph-service/.env
+# 编辑 DEEPSEEK_API_KEY
+
+# 仅 Desktop（Electron 内嵌启动 LangGraph）
+pnpm dev:desktop
+
+# 或并行（turbo 会同时起 langgraph-service，Desktop 自动复用 :2024）
+pnpm dev
 ```
-
-或分别启动：
-
-```bash
-pnpm dev:mastra   # Mastra Studio + API (http://localhost:4111/mastra)
-pnpm dev:desktop  # Electron (:5175)
-```
-
-在 `apps/mastra-service` 复制 `.env.example` 为 `.env`，填写 `DEEPSEEK_API_KEY` 后即可使用。
-
-## 常用命令
-
-Monorepo 使用 [Turborepo](https://turbo.build/)（`turbo`，**不是** Next.js 的 Turbopack）编排任务：构建缓存、依赖顺序、并行 dev。
-
-`pnpm dev` 会打开 **TUI 终端界面**：左侧为服务列表，右侧为选中服务的日志；用 `↑`/`↓` 切换，`/` 搜索任务。
-
-| 命令 | 说明 |
-|------|------|
-| `pnpm dev` | TUI 并行启动 Mastra Service + Desktop |
-| `pnpm dev:mastra` | 仅 Mastra Service |
-| `pnpm dev:desktop` | 仅 Electron 桌面 |
-| `pnpm check-types` | 全仓库类型检查（先 shared，再 apps） |
-| `pnpm build` | 构建 Mastra Service + Desktop（带缓存） |
-| `pnpm package:desktop` | 打包桌面应用（内含 Mastra 子进程） |
-| `pnpm lint` | ESLint（desktop） |
-
-若需传统混流日志（无分栏），可运行 `turbo run dev --ui=stream`。
-
-## LLM 配置（环境变量）
-
-Mastra Service 从本地环境变量读取 LLM 凭据（见 `apps/mastra-service/.env.example`）：
-
-| 变量 | 必填 | 说明 |
-|------|------|------|
-| `DEEPSEEK_API_KEY` | 是 | DeepSeek / OpenAI 兼容 API Key |
-| `STORY_STUDIO_LLM_BASE_URL` | 否 | Base URL（默认 `https://api.deepseek.com`） |
-| `STORY_STUDIO_CHAT_MODEL` | 否 | 聊天模型（默认 `deepseek-chat`） |
-
-Middleware 启动时将上述变量写入 `requestContext`，Agent 运行时解析为 OpenAI 兼容调用。
-
-## 运行时注册
-
-Electron 启动后会向 Mastra 注册本地运行时信息（`POST /mastra/studio/runtime/register`）：
-
-| 字段 | 说明 |
-|------|------|
-| `userDataRoot` | Electron userData 路径（Memory DB、对话 manifest） |
-
-也可通过环境变量 `STORY_STUDIO_USER_DATA` 配置（适用于独立部署 Mastra）。
-
-## 桌面打包
-
-打包产物为单个安装包，运行时由 Electron Main 以 sidecar 子进程拉起 Mastra（`ELECTRON_RUN_AS_NODE`），无需用户单独安装 Node 或启动 Mastra。
-
-```bash
-pnpm package:desktop
-```
-
-产物输出到 `apps/desktop/release/`。流程：
-
-1. `mastra build` → `apps/mastra-service/.mastra/output/`
-2. `vite build` → 渲染进程 + Electron Main
-3. `electron-builder` → 将 Mastra 产物放入 `resources/mastra/`
-
-**LLM 凭据（打包后）**：在 Electron `userData` 目录创建 `.env` 文件，写入 `DEEPSEEK_API_KEY=sk-...`（与开发时 `apps/mastra-service/.env` 相同格式）。Main 启动 Mastra 子进程时会自动注入。
-
-开发环境仍保持双进程：`pnpm dev` 并行启动 Mastra + Electron，Main 不 spawn Mastra。
 
 ## 环境变量
 
+`apps/langgraph-service/.env`：
+
+| 变量 | 必填 | 说明 |
+|------|------|------|
+| `DEEPSEEK_API_KEY` | 是 | LLM API Key |
+| `LANGSMITH_API_KEY` | 推荐 | LangSmith API Key，用于 trace 与 Studio 调试 |
+| `LANGSMITH_TRACING` | 推荐 | 设为 `true` 开启 LangSmith 追踪 |
+| `LANGSMITH_PROJECT` | 否 | LangSmith 项目名，默认 `default` |
+| `STORY_STUDIO_MCP_URL` | 独立 dev 时建议填写 | 默认 `http://127.0.0.1:3100/mcp`（需先启动 Desktop MCP） |
+| `STORY_STUDIO_MCP_TOKEN` | 独立 dev 时建议填写 | 默认 `dev-local-token`，与 Electron 开发模式一致 |
+| `STORY_STUDIO_USER_DATA` | 否 | Electron 自动注入 userData 路径 |
+
+Desktop 开发可选：
+
 | 变量 | 说明 |
 |------|------|
-| `STORY_STUDIO_MASTRA_URL` | Mastra 服务地址（默认 `http://127.0.0.1:4111`） |
-| `DEEPSEEK_API_KEY` | LLM API Key（Mastra Service 必填） |
-| `STORY_STUDIO_LLM_BASE_URL` | LLM Base URL（可选） |
-| `STORY_STUDIO_CHAT_MODEL` | 聊天模型（可选） |
-| `STORY_STUDIO_USER_DATA` | Memory DB 根目录（可选，Electron 会注册） |
+| `STORY_STUDIO_SKIP_EMBEDDED_LANGGRAPH=1` | 禁止 Electron 内嵌 spawn LangGraph |
+| `VITE_LANGGRAPH_API_URL` | 跳过 API 发现，直连指定 URL |
+
+## 安全与数据
+
+- MCP 仅监听 `127.0.0.1`，需 Bearer token
+- `workPath` 通过 HTTP 头 `x-story-studio-work-path` 传递，非全局状态
+- 对话 mode 在创建时写入 thread metadata，已有对话不可切换模式
+- LangGraph checkpoint 存储于 `apps/langgraph-service/.langgraph_api/`（开发）或 userData（内嵌运行时）
+
+## 常用命令
+
+| 命令 | 说明 |
+|------|------|
+| `pnpm dev` | 并行启动 LangGraph + Desktop |
+| `pnpm dev:agent` | 仅 `langgraphjs dev`（:2024） |
+| `pnpm dev:desktop` | Electron + MCP + 内嵌 LangGraph |
+| `pnpm check-types` | 类型检查 |

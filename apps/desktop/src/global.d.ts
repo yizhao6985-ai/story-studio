@@ -17,6 +17,18 @@ declare global {
         getUserDataPath: () => Promise<string>;
       };
 
+      studio: {
+        getLangGraphApiUrl: () => Promise<string | null>;
+        getServiceStatus: () => Promise<{
+          mcp: { ok: boolean; url: string };
+          langgraph: { ok: boolean; url: string | null; embedded: boolean };
+        }>;
+        waitForServices: () => Promise<{
+          mcp: { ok: boolean; url: string };
+          langgraph: { ok: boolean; url: string | null; embedded: boolean };
+        }>;
+      };
+
       library: {
         pickDirectory: () => Promise<string | null>;
         createWorkspace: (
@@ -27,19 +39,6 @@ declare global {
         listWorks: () => Promise<string[]>;
         addWork: (workPath: string) => Promise<string[]>;
         removeWork: (workPath: string) => Promise<string[]>;
-        listConversations: (workPath: string) => Promise<ConversationManifest[]>;
-        createConversation: (
-          workPath: string,
-          title?: string,
-        ) => Promise<ConversationManifest>;
-        deleteConversation: (
-          workPath: string,
-          conversationId: string,
-        ) => Promise<boolean>;
-        touchConversation: (
-          workPath: string,
-          conversationId: string,
-        ) => Promise<ConversationManifest | null>;
         listWorkFileTree: (workPath: string) => Promise<WorkspaceEntry[]>;
         readWorkspaceFile: (
           workPath: string,

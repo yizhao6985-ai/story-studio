@@ -1,0 +1,24 @@
+{
+  "name": "@story-studio/langgraph-service",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "langgraphjs dev -c langgraph.json --no-browser",
+    "build": "tsc --noEmit",
+    "check-types": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@langchain/core": "^1.2.1",
+    "@langchain/langgraph": "^1.4.7",
+    "@langchain/mcp-adapters": "^1.1.3",
+    "@langchain/openai": "^1.5.5",
+    "@story-studio/shared": "workspace:*",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@langchain/langgraph-cli": "^1.0.26",
+    "@types/node": "^24.12.4",
+    "typescript": "^5.9.3"
+  }
+}

@@ -59,8 +59,7 @@ export function AppShell() {
     activeConversationId,
     mode,
     setMode,
-    delegateMaxTurns,
-    setDelegateMaxTurns,
+    modeLocked,
     input,
     setInput,
     chatMessages,
@@ -74,8 +73,6 @@ export function AppShell() {
     setCreateWorkspaceOpen,
     llmError,
     appNotice,
-    contextUsage,
-    delegateSession,
     shortcutsOpen,
     setShortcutsOpen,
     conversationContextLabel,
@@ -157,20 +154,13 @@ export function AppShell() {
             onChange={setInput}
             mode={mode}
             onModeChange={setMode}
-            delegateMaxTurns={delegateMaxTurns}
-            onDelegateMaxTurnsChange={setDelegateMaxTurns}
+            modeLocked={modeLocked}
             onSend={send}
             onStop={() => void stopChat()}
             loading={loading}
             disabled={false}
             canSend={Boolean(activeConversationId && input.trim())}
-            placeholder={
-              mode === "delegate"
-                ? "描述托管目标，例如：完善第三章并写入文件…"
-                : "对 Story Studio 说…"
-            }
-            contextUsage={contextUsage}
-            delegateSession={delegateSession}
+            placeholder="对 Story Studio 说…"
           />
         </div>
       </div>
@@ -352,8 +342,6 @@ export function AppShell() {
                     defaultWorkPath={composeDefaultWorkPath}
                     mode={mode}
                     onModeChange={setMode}
-                    delegateMaxTurns={delegateMaxTurns}
-                    onDelegateMaxTurnsChange={setDelegateMaxTurns}
                     onCreateWorkspace={openCreateWorkspaceDialog}
                     onCreate={startNewConversation}
                     onCancel={closeComposeConversation}

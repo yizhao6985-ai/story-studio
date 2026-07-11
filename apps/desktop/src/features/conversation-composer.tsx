@@ -5,13 +5,8 @@ import {
   ComposerModeSelector,
   cycleComposerMode,
 } from "@/features/composer-mode-selector";
-import { DelegateMaxTurnsControl } from "@/features/delegate-max-turns-control";
-import {
-  ContextUsageMeter,
-  type ContextUsageInfo,
-} from "@/features/context-usage-meter";
 import { useAutoResizeTextarea } from "@/hooks/input/use-auto-resize-textarea";
-import type { ComposerMode, DelegateSessionInfo } from "@/hooks/types";
+import type { ComposerMode } from "@/hooks/types";
 import { COMPOSER_TEXTAREA_CLASS } from "@/lib/composer-chrome";
 import { cn } from "@/lib/utils";
 
@@ -20,16 +15,13 @@ type ConversationComposerProps = {
   onChange: (value: string) => void;
   mode: ComposerMode;
   onModeChange: (mode: ComposerMode) => void;
-  delegateMaxTurns: number;
-  onDelegateMaxTurnsChange: (maxTurns: number) => void;
+  modeLocked?: boolean;
   onSend: () => void;
   onStop?: () => void;
   loading: boolean;
   disabled: boolean;
   canSend: boolean;
   placeholder?: string;
-  contextUsage?: ContextUsageInfo | null;
-  delegateSession?: DelegateSessionInfo | null;
 };
 
 export function ConversationComposer({
@@ -37,24 +29,17 @@ export function ConversationComposer({
   onChange,
   mode,
   onModeChange,
-  delegateMaxTurns,
-  onDelegateMaxTurnsChange,
+  modeLocked = false,
   onSend,
   onStop,
   loading,
   disabled,
   canSend,
   placeholder = "对 Story Studio 说…",
-  contextUsage = null,
-  delegateSession = null,
 }: ConversationComposerProps) {
   const textareaRef = useAutoResizeTextarea({ value, minRows: 1, maxRows: 5 });
 
-  const isDelegateMode = mode === "delegate";
-
-  const modeSwitchDisabled = disabled || (loading && isDelegateMode);
-  const maxTurnsControlDisabled =
-    modeSwitchDisabled || Boolean(delegateSession);
+  const modeSwitchDisabled = disabled || loading || modeLocked;
 
   const cycleMode = () => {
     if (modeSwitchDisabled) return;
@@ -71,14 +56,6 @@ export function ConversationComposer({
 
   return (
     <div className="w-full space-y-2">
-      {delegateSession && (
-        <div className="rounded-none border border-delegate/20 bg-delegate/5 px-3 py-1.5 text-xs text-delegate backdrop-blur-sm">
-          托管中 · 第 {delegateSession.turn}/{delegateSession.maxTurns} 轮
-          {delegateSession.artifactPaths.length > 0
-            ? ` · 已产出 ${delegateSession.artifactPaths.length} 个文件`
-            : " · 尚无落盘产出"}
-        </div>
-      )}
       <div className="group w-full rounded-none border border-border bg-card transition-[border-color] duration-150 focus-within:border-foreground/20">
         <div className="flex items-end gap-1.5 px-2 py-1.5">
           <textarea
@@ -87,7 +64,7 @@ export function ConversationComposer({
             onChange={(event) => onChange(event.target.value)}
             placeholder={placeholder}
             rows={1}
-            disabled={disabled || (loading && isDelegateMode)}
+            disabled={disabled || loading}
             className={cn(
               "block max-h-[120px] flex-1 resize-none border-none bg-transparent outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-50",
               COMPOSER_TEXTAREA_CLASS,
@@ -113,10 +90,8 @@ export function ConversationComposer({
             className="size-7 shrink-0 rounded-none"
             onClick={handlePrimaryAction}
             disabled={disabled || (!loading && !canSend)}
-            aria-label={loading ? "停止" : isDelegateMode ? "开始托管" : "发送"}
-            title={
-              loading ? "停止" : isDelegateMode ? "开始托管 (Enter)" : "发送 (Enter)"
-            }
+            aria-label={loading ? "停止" : "发送"}
+            title={loading ? "停止" : "发送 (Enter)"}
           >
             {loading ? (
               <Square
@@ -131,23 +106,12 @@ export function ConversationComposer({
       </div>
 
       <div className="flex w-full items-center justify-between gap-2">
-        <div className="flex min-w-0 items-center gap-1.5">
-          <ComposerModeSelector
-            mode={mode}
-            onModeChange={onModeChange}
-            disabled={modeSwitchDisabled}
-          />
-          {isDelegateMode ? (
-            <DelegateMaxTurnsControl
-              value={delegateMaxTurns}
-              onChange={onDelegateMaxTurnsChange}
-              disabled={maxTurnsControlDisabled}
-            />
-          ) : null}
-        </div>
-        <div className="flex min-w-0 items-center gap-2">
-          <ContextUsageMeter usage={contextUsage} />
-        </div>
+        <ComposerModeSelector
+          mode={mode}
+          onModeChange={onModeChange}
+          disabled={modeSwitchDisabled}
+          locked={modeLocked}
+        />
       </div>
     </div>
   );

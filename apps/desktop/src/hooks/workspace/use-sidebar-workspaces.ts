@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { evictWorkAgent } from "@/lib/mastra";
 import type { WorkManifest, WorkSnapshot } from "@/lib/story";
 
 import type { WorkspaceEntry } from "@/hooks/types";
@@ -123,11 +122,6 @@ export function useSidebarWorkspaces(activeWorkspace: WorkSnapshot | null) {
   }, []);
 
   const removeWorkspaceFromSidebar = useCallback(async (workPath: string) => {
-    try {
-      await evictWorkAgent(workPath);
-    } catch {
-      // 作品 Agent 缓存驱逐失败不阻塞移除
-    }
     const paths = await window.storyStudio.library.removeWork(workPath);
     setSidebarWorkspacePaths(paths);
     setExpandedWorkPaths((prev) => {

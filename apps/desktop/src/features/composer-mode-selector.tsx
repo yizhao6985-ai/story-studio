@@ -15,13 +15,11 @@ export const COMPOSER_MODE_OPTIONS: {
 }[] = [
   { id: "ask", label: "提问", description: "只读工作区，回答问题" },
   { id: "normal", label: "创作", description: "探索作品结构后修改文件" },
-  { id: "delegate", label: "托管", description: "设定目标，自动对话至产出" },
 ];
 
 const MODE_TAG_STYLES: Record<ComposerMode, string> = {
   ask: "border-success/25 bg-success/10 text-success",
   normal: "border-border bg-foreground/[0.04] text-foreground",
-  delegate: "border-delegate/25 bg-delegate/10 text-delegate",
 };
 
 export function cycleComposerMode(
@@ -37,6 +35,7 @@ type ComposerModeSelectorProps = {
   mode: ComposerMode;
   onModeChange: (mode: ComposerMode) => void;
   disabled?: boolean;
+  locked?: boolean;
   className?: string;
 };
 
@@ -44,6 +43,7 @@ export function ComposerModeSelector({
   mode,
   onModeChange,
   disabled = false,
+  locked = false,
   className,
 }: ComposerModeSelectorProps) {
   const [modeMenuOpen, setModeMenuOpen] = useState(false);
@@ -70,7 +70,11 @@ export function ComposerModeSelector({
         type="button"
         disabled={disabled}
         onClick={() => setModeMenuOpen((open) => !open)}
-        title="切换模式 (Shift + Tab)"
+        title={
+          locked
+            ? "当前对话已锁定模式，请新建对话以切换"
+            : "切换模式 (Shift + Tab)"
+        }
         className={cn(
           COMPOSER_TAG_BUTTON_CLASS,
           MODE_TAG_STYLES[mode],
@@ -101,7 +105,6 @@ export function ComposerModeSelector({
                 className={cn(
                   "text-xs font-medium",
                   item.id === "ask" && "text-success",
-                  item.id === "delegate" && "text-delegate",
                   item.id === "normal" && "text-foreground",
                 )}
               >

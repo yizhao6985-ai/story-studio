@@ -18,18 +18,23 @@ import {
   loadWork,
   updateWorkTitle,
 } from "./library/index.js";
-import {
-  createConversation,
-  deleteConversation,
-  listConversations,
-  touchConversation,
-} from "./library/conversation-store.js";
 import { removeWorkUserData } from "./library/work-data-dir.js";
 import {
   addRegisteredWork,
   listRegisteredWorks,
   removeRegisteredWork,
 } from "./library/registry.js";
+import { configureMcpAuth, initializeMcpAuthToken } from "./mcp/mcp-auth.js";
+import {
+  getAgentServiceStatus,
+  getLangGraphApiUrl,
+  initializeAgentServices,
+  stopEmbeddedLangGraph,
+} from "./agent-services.js";
+import {
+  startWorkspaceMcpServer,
+  stopWorkspaceMcpServer,
+} from "./mcp/workspace-mcp-server.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -79,9 +84,19 @@ function createWindow() {
 }
 
 app.whenReady().then(async () => {
-  configureWorkspaceFs({ getUserDataRoot: () => app.getPath("userData") });
+  const userDataPath = app.getPath("userData");
+  configureWorkspaceFs({ getUserDataRoot: () => userDataPath });
+  configureMcpAuth({ devFallback: !app.isPackaged });
+  initializeMcpAuthToken();
+  await startWorkspaceMcpServer();
+  await initializeAgentServices(userDataPath);
   createWindow();
   registerIpcHandlers();
+});
+
+app.on("before-quit", () => {
+  void stopEmbeddedLangGraph();
+  void stopWorkspaceMcpServer();
 });
 
 function registerIpcHandlers() {
@@ -90,6 +105,20 @@ function registerIpcHandlers() {
   });
 
   ipcMain.handle("app:getUserDataPath", () => app.getPath("userData"));
+
+  ipcMain.handle("studio:getLangGraphApiUrl", () => getLangGraphApiUrl());
+
+  ipcMain.handle("studio:getServiceStatus", () => getAgentServiceStatus());
+
+  ipcMain.handle("studio:waitForServices", async () => {
+    const started = Date.now();
+    while (Date.now() - started < 90_000) {
+      const status = await getAgentServiceStatus();
+      if (status.mcp.ok && status.langgraph.ok) return status;
+      await new Promise((resolve) => setTimeout(resolve, 400));
+    }
+    return getAgentServiceStatus();
+  });
 
   ipcMain.handle("library:pickDirectory", async () => {
     const result = await dialog.showOpenDialog(mainWindow!, {
@@ -128,31 +157,6 @@ function registerIpcHandlers() {
     await removeWorkUserData(workPath);
     return removeRegisteredWork(workPath);
   });
-
-  ipcMain.handle("library:listConversations", async (_e, workPath: string) => {
-    return listConversations(workPath);
-  });
-
-  ipcMain.handle(
-    "library:createConversation",
-    async (_e, workPath: string, title?: string) => {
-      return createConversation(workPath, title);
-    },
-  );
-
-  ipcMain.handle(
-    "library:deleteConversation",
-    async (_e, workPath: string, conversationId: string) => {
-      return deleteConversation(workPath, conversationId);
-    },
-  );
-
-  ipcMain.handle(
-    "library:touchConversation",
-    async (_e, workPath: string, conversationId: string) => {
-      return touchConversation(workPath, conversationId);
-    },
-  );
 
   ipcMain.handle("library:listWorkFileTree", async (_e, workPath: string) => {
     return listWorkFileTree(workPath);

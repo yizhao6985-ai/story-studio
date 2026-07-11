@@ -1,0 +1,7 @@
+{
+  "node_version": "20",
+  "graphs": {
+    "story-studio": "./src/graphs/story-studio.ts:graph"
+  },
+  "env": ".env"
+}

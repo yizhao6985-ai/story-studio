@@ -13,4 +13,3 @@ export {
   renameWorkWorkspaceEntry,
   writeWorkWorkspaceFile,
 } from "./files.ts";
-export { updateConversationTitle } from "./conversations.ts";
