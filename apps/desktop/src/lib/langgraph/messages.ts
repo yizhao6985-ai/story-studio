@@ -9,6 +9,13 @@ export type ChatDisplayMessage = {
   status?: "running" | "done";
 };
 
+export const WORKSPACE_MUTATING_TOOLS = new Set([
+  "edit_file",
+  "write_file",
+  "mkdir",
+  "delete_file",
+]);
+
 function messageContentToText(content: unknown): string {
   if (typeof content === "string") return content;
   if (Array.isArray(content)) {
@@ -19,6 +26,17 @@ function messageContentToText(content: unknown): string {
       .join("");
   }
   return String(content ?? "");
+}
+
+function isInternalStructuredPayload(text: string): boolean {
+  const trimmed = text.trim();
+  if (!trimmed.startsWith("{")) return false;
+
+  return (
+    /"summary"\s*:/.test(trimmed) ||
+    /"subTasks"\s*:/.test(trimmed) ||
+    /"needsClarification"\s*:/.test(trimmed)
+  );
 }
 
 function summarizeToolArgs(args: unknown): string {
@@ -86,6 +104,8 @@ export function toDisplayMessages(messages: BaseMessage[]): ChatDisplayMessage[]
     }
 
     if (AIMessage.isInstance(message)) {
+      if (isInternalStructuredPayload(content)) continue;
+
       result.push({
         id: message.id ?? crypto.randomUUID(),
         role: "assistant",
@@ -99,4 +119,31 @@ export function toDisplayMessages(messages: BaseMessage[]): ChatDisplayMessage[]
 
 export function getMessageText(message: ChatDisplayMessage): string {
   return message.content;
+}
+
+/** Returns tool_call_ids for newly completed workspace-mutating tools. */
+export function findNewWorkspaceMutations(
+  messages: BaseMessage[],
+  seenToolCallIds: ReadonlySet<string>,
+): string[] {
+  const toolNames = new Map<string, string>();
+  for (const message of messages) {
+    if (!AIMessage.isInstance(message) || !message.tool_calls?.length) continue;
+    for (const call of message.tool_calls) {
+      if (call.id) toolNames.set(call.id, call.name);
+    }
+  }
+
+  const newlyMutated: string[] = [];
+  for (const message of messages) {
+    if (!ToolMessage.isInstance(message) || !message.tool_call_id) continue;
+    if (seenToolCallIds.has(message.tool_call_id)) continue;
+
+    const toolName = toolNames.get(message.tool_call_id);
+    if (!toolName || !WORKSPACE_MUTATING_TOOLS.has(toolName)) continue;
+
+    newlyMutated.push(message.tool_call_id);
+  }
+
+  return newlyMutated;
 }

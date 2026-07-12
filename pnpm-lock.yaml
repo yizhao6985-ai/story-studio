@@ -141,6 +141,9 @@ importers:
       '@story-studio/shared':
         specifier: workspace:*
         version: link:../../packages/shared
+      '@story-studio/workspace-fs':
+        specifier: workspace:*
+        version: link:../../packages/workspace-fs
       zod:
         specifier: ^3.25.76
         version: 3.25.76

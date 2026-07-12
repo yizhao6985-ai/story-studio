@@ -2,10 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { ArrowUp, Loader2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import {
-  ComposerModeSelector,
-  cycleComposerMode,
-} from "@/features/composer-mode-selector";
+import { ComposerModeSelector, cycleComposerMode } from "@/features/composer-mode-selector";
 import { WorkspaceSelector, type WorkspaceOption } from "@/features/workspace-selector";
 import type { ComposerMode } from "@/hooks/types";
 import { cn } from "@/lib/utils";
@@ -132,7 +129,7 @@ export function CreateConversationComposer({
           disabled={loading}
         />
 
-        <div className="w-full space-y-2">
+        <div className="w-full space-y-2" data-composer-root>
           <div className="group w-full rounded-none border border-border bg-card transition-[border-color] duration-150 focus-within:border-foreground/20">
             <div className="flex items-end gap-1.5 px-2 py-1.5">
               <textarea

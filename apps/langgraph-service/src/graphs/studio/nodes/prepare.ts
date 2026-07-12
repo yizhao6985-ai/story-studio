@@ -1,6 +1,8 @@
 import { AIMessage, isHumanMessage } from "@langchain/core/messages";
 import type { RunnableConfig } from "@langchain/core/runnables";
 
+import { getRelevantContext } from "../../../context/service.js";
+import { requireWorkPathFromConfig } from "../../../mcp/work-path.js";
 import type { StudioGraphState } from "../state.js";
 import { getModeFromConfig } from "../config.js";
 
@@ -33,9 +35,16 @@ export async function prepareTurnNode(
     throw new Error("USER_MESSAGE_MISSING");
   }
 
+  const workPath = requireWorkPathFromConfig(config);
+  const projectContext = await getRelevantContext({
+    workPath,
+    query: userMessage,
+  });
+
   return {
     mode: getModeFromConfig(config),
     userMessage,
+    projectContext,
     intent: undefined,
     taskQueue: [],
     taskIndex: 0,

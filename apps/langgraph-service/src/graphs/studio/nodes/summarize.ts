@@ -10,7 +10,7 @@ export async function summarizeNode(
 ): Promise<Partial<StudioGraphState>> {
   const userMessage =
     state.userMessage?.trim() || getLastHumanMessageText(state.messages);
-  const model = createChatModel({ temperature: 0.3 });
+  const model = createChatModel({ temperature: 0.3, disableThinking: true });
   const response = await model.invoke([
     new SystemMessage(
       "你是 Story Studio 对话助手。用简洁、自然的中文回复用户，整合子任务结果。",
@@ -23,6 +23,7 @@ export async function summarizeNode(
         state.intent?.needsClarification
           ? state.intent.clarificationQuestion
           : undefined,
+        state.projectContext,
       ),
     ),
   ]);

@@ -152,12 +152,6 @@ export function useWorkspaceFiles({ work, refreshKey, onWorkUpdated }: UseWorksp
       }
 
       pruneInvalidTabs(tree);
-
-      const hasDirtyTab = openTabsRef.current.some((path) =>
-        isTabDirty(tabStatesRef.current[path]),
-      );
-      if (!options.force && hasDirtyTab) return;
-
       await reloadCleanTabs(work.workPath, tree, options.force);
 
       if (openTabsRef.current.length === 0) {
@@ -196,10 +190,6 @@ export function useWorkspaceFiles({ work, refreshKey, onWorkUpdated }: UseWorksp
 
     void (async () => {
       const tree = await loadTree();
-      const hasDirtyTab = openTabsRef.current.some((path) =>
-        isTabDirty(tabStatesRef.current[path]),
-      );
-      if (hasDirtyTab) return;
       await syncOpenTabs(tree, { force: false });
     })();
   }, [work?.workPath, refreshKey]); // eslint-disable-line react-hooks/exhaustive-deps

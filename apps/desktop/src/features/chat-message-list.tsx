@@ -71,8 +71,23 @@ function UserMessageBubble({ message }: { message: ChatDisplayMessage }) {
   );
 }
 
+function TypingIndicator() {
+  return (
+    <div className="animate-fade-in w-full text-[13px] leading-[1.7] text-foreground">
+      <MessageLoadingDots />
+    </div>
+  );
+}
+
 export function ChatMessageList({ messages, status }: ChatMessageListProps) {
   const isStreaming = status === "streaming" || status === "submitted";
+  const lastMessage = messages.at(-1);
+  const lastIsStreamingAssistant =
+    isStreaming && lastMessage?.role === "assistant";
+  const lastIsRunningTool =
+    lastMessage?.role === "tool" && lastMessage.status === "running";
+  const showTypingIndicator =
+    isStreaming && !lastIsStreamingAssistant && !lastIsRunningTool;
 
   return (
     <>
@@ -102,6 +117,7 @@ export function ChatMessageList({ messages, status }: ChatMessageListProps) {
 
         return null;
       })}
+      {showTypingIndicator ? <TypingIndicator /> : null}
     </>
   );
 }

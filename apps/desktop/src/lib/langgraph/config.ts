@@ -1,6 +1,14 @@
-const DEFAULT_LANGGRAPH_URL = "http://127.0.0.1:2024";
+const DEFAULT_LANGGRAPH_URL = "http://localhost:2024";
 
 let cachedApiUrl: string | null = null;
+
+function langGraphCandidates(): string[] {
+  return [
+    DEFAULT_LANGGRAPH_URL,
+    "http://127.0.0.1:2024",
+    "http://127.0.0.1:8123",
+  ];
+}
 
 async function probeLangGraph(baseUrl: string): Promise<boolean> {
   try {
@@ -58,27 +66,28 @@ export async function waitForAgentServices(): Promise<ServiceHealth> {
 export async function discoverLangGraphApiUrl(): Promise<string> {
   if (cachedApiUrl) return cachedApiUrl;
 
+  const fromEnv = import.meta.env.VITE_LANGGRAPH_API_URL?.trim();
+  if (fromEnv) {
+    const url = fromEnv.replace(/\/$/, "");
+    if (await probeLangGraph(url)) {
+      cachedApiUrl = url;
+      return url;
+    }
+  }
+
   const fromIpc = await window.storyStudio.studio.getLangGraphApiUrl?.();
   if (fromIpc && (await probeLangGraph(fromIpc))) {
     cachedApiUrl = fromIpc.replace(/\/$/, "");
     return cachedApiUrl;
   }
 
-  const fromEnv = import.meta.env.VITE_LANGGRAPH_API_URL?.trim();
-  const candidates = fromEnv
-    ? [fromEnv.replace(/\/$/, "")]
-    : [
-        DEFAULT_LANGGRAPH_URL,
-        "http://localhost:2024",
-        "http://127.0.0.1:8123",
-      ];
-
   const health = await waitForAgentServices().catch(() => null);
-  if (health?.langgraphUrl) {
+  if (health?.langgraphUrl && (await probeLangGraph(health.langgraphUrl))) {
     cachedApiUrl = health.langgraphUrl.replace(/\/$/, "");
     return cachedApiUrl;
   }
 
+  const candidates = langGraphCandidates();
   const started = Date.now();
   while (Date.now() - started < 60_000) {
     for (const candidate of candidates) {

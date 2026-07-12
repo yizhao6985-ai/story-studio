@@ -7,7 +7,12 @@
     "strict": true,
     "skipLibCheck": true,
     "noEmit": true,
-    "isolatedModules": true
+    "isolatedModules": true,
+    "types": ["node"],
+    "paths": {
+      "@story-studio/shared": ["../shared/src/index.ts"],
+      "@story-studio/shared/*": ["../shared/src/*"]
+    }
   },
   "include": ["src/**/*"]
 }

@@ -10,6 +10,7 @@ import {
 } from "@/lib/app-session";
 import { resolveRunFailure, type LlmErrorDisplay } from "@/lib/agent-error-display";
 import { useAppKeyboardShortcuts } from "@/hooks/keyboard/use-app-keyboard-shortcuts";
+import { useComposerModeCycleShortcut } from "@/hooks/keyboard/use-composer-mode-cycle-shortcut";
 import { useSidebarPanelCollapse } from "@/hooks/layout/use-sidebar-panel-collapse";
 import { useWorkspacePanelCollapse } from "@/hooks/layout/use-workspace-panel-collapse";
 import { useSidebarWorkspaces } from "@/hooks/workspace/use-sidebar-workspaces";
@@ -25,6 +26,7 @@ import {
   createConversation,
   deleteConversation,
   getThreadMetadata,
+  updateConversationMode,
   listConversations,
 } from "@/lib/langgraph";
 
@@ -36,7 +38,6 @@ export function useAppShellState() {
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
   const [input, setInput] = useState("");
   const [mode, setModeState] = useState<AgentMode>("normal");
-  const [modeLocked, setModeLocked] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [settingsSectionId, setSettingsSectionId] =
     useState<SettingsSectionId>("appearance");
@@ -88,18 +89,27 @@ export function useAppShellState() {
     refreshAllConversations,
   ]);
 
-  const refreshWorkspaceAfterChat = useCallback(async () => {
+  const syncActiveWorkspace = useCallback(async () => {
     const workPath = activeWorkspace?.workPath;
-    if (!workPath || !activeConversationId) return;
+    if (!workPath) return;
 
     const snap = await window.storyStudio.library.openWork(workPath);
     setActiveWorkspace(snap);
     cacheManifest(workPath, snap.manifest);
-    await loadConversationsFor(workPath);
+  }, [activeWorkspace?.workPath, cacheManifest]);
+
+  const refreshWorkspaceAfterChat = useCallback(async () => {
+    const workPath = activeWorkspace?.workPath;
+    if (!workPath) return;
+
+    await syncActiveWorkspace();
+    if (activeConversationId) {
+      await loadConversationsFor(workPath);
+    }
   }, [
     activeWorkspace?.workPath,
     activeConversationId,
-    cacheManifest,
+    syncActiveWorkspace,
     loadConversationsFor,
   ]);
 
@@ -116,6 +126,9 @@ export function useAppShellState() {
     mode,
     onFinish: () => {
       void refreshWorkspaceAfterChat();
+    },
+    onWorkspaceMutated: () => {
+      void syncActiveWorkspace();
     },
     onError: (error) => {
       const resolved = resolveRunFailure(error);
@@ -145,9 +158,6 @@ export function useAppShellState() {
           throw new Error("THREAD_WORKSPACE_MISMATCH");
         }
         setModeState(metadata.mode);
-        setModeLocked(true);
-      } else {
-        setModeLocked(false);
       }
 
       const snap = await window.storyStudio.library.openWork(workPath);
@@ -162,10 +172,12 @@ export function useAppShellState() {
 
   const setMode = useCallback(
     (nextMode: AgentMode) => {
-      if (modeLocked && activeConversationId) return;
       setModeState(nextMode);
+      if (activeConversationId) {
+        void updateConversationMode(activeConversationId, nextMode);
+      }
     },
-    [modeLocked, activeConversationId],
+    [activeConversationId],
   );
 
   useEffect(() => {
@@ -249,7 +261,6 @@ export function useAppShellState() {
     (defaultWorkPath?: string) => {
       setComposeDefaultWorkPath(defaultWorkPath);
       setActiveConversationId(null);
-      setModeLocked(false);
       if (defaultWorkPath) {
         void window.storyStudio.library.openWork(defaultWorkPath).then((snap) => {
           setActiveWorkspace(snap);
@@ -299,7 +310,7 @@ export function useAppShellState() {
 
       setLlmError(null);
       setAppNotice("");
-      await sendMessage(trimmed);
+      await sendMessage(trimmed, { workPath, threadId: conversationId });
     },
     [activeWorkspace?.workPath, activeConversationId, loading, sendMessage],
   );
@@ -311,18 +322,34 @@ export function useAppShellState() {
       await activateConversation(workPath, created.id);
       setComposeDefaultWorkPath(undefined);
 
-      if (initialMessage.trim()) {
-        await submitChatText(initialMessage, workPath, created.id);
+      const trimmed = initialMessage.trim();
+      if (!trimmed) return;
+
+      setLlmError(null);
+      setAppNotice("");
+      try {
+        await sendMessage(trimmed, { workPath, threadId: created.id });
+      } catch (error) {
+        const resolved = resolveRunFailure(error);
+        if (resolved.llm) setLlmError(resolved.llm);
+        if (resolved.appNotice) setAppNotice(resolved.appNotice);
       }
     },
-    [loadConversationsFor, activateConversation, submitChatText, mode],
+    [loadConversationsFor, activateConversation, sendMessage, mode],
   );
 
   const send = useCallback(async () => {
     if (!input.trim()) return;
     const text = input.trim();
     setInput("");
-    await submitChatText(text);
+    try {
+      await submitChatText(text);
+    } catch (error) {
+      setInput(text);
+      const resolved = resolveRunFailure(error);
+      if (resolved.llm) setLlmError(resolved.llm);
+      if (resolved.appNotice) setAppNotice(resolved.appNotice);
+    }
   }, [input, submitChatText]);
 
   useEffect(() => {
@@ -365,6 +392,12 @@ export function useAppShellState() {
       }
       void window.storyStudio.app.closeWindow();
     },
+  });
+
+  useComposerModeCycleShortcut({
+    mode,
+    onModeChange: setMode,
+    disabled: showSettings,
   });
 
   const sidebarWorkspaces = useMemo<WorkspaceSidebarEntry[]>(
@@ -465,7 +498,6 @@ export function useAppShellState() {
     activeConversationId,
     mode,
     setMode,
-    modeLocked,
     input,
     setInput,
     chatMessages: messages,

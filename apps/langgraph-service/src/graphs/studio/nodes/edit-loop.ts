@@ -7,10 +7,10 @@ import type { StudioGraphState } from "../state.js";
 import { runToolLoop } from "../tool-loop.js";
 
 const EDIT_SYSTEM = `你是 Story Studio 创作执行助手。
-根据子任务目标使用工具读写作品文件。
-流程：先读清相关文件 → 执行修改 → 自检是否完成。
+阅读结果已在【已完成子任务上下文】中提供，优先使用已有上下文，不要重复读取。
+直接根据上下文执行 create / edit / delete 操作，完成后自检并简要说明改动。
 保持原有文风与格式。
-delete 类型：仅删除任务指定的 targets，删除前必须 read_file 确认。
+delete 类型：仅删除任务指定的 targets，不要扩大范围。
 非 delete 任务不要删除文件。`;
 
 export async function editLoopNode(
@@ -27,8 +27,8 @@ export async function editLoopNode(
     workPath,
     profile: "writer",
     systemPrompt: EDIT_SYSTEM,
-    userPrompt: formatEditTaskPrompt(task, state.taskResults),
-    maxSteps: 22,
+    userPrompt: formatEditTaskPrompt(task, state.taskResults, state.projectContext),
+    maxToolRounds: 22,
     abortSignal: config.signal ?? undefined,
   });
 

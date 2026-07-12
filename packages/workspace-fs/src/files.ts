@@ -40,6 +40,16 @@ function assertNotProtected(
 
 const DEFAULT_READ_MAX_LINES = 200;
 
+export async function getWorkFileRevision(
+  workPath: string,
+  inputPath: string,
+): Promise<string> {
+  const relativePath = normalizeWorkspaceRelativePath(workPath, inputPath);
+  const absPath = resolveWorkspaceFilePath(workPath, relativePath);
+  const info = await stat(absPath);
+  return `${info.mtime.toISOString()}:${info.size}`;
+}
+
 export async function readWorkWorkspaceFile(
   workPath: string,
   inputPath: string,

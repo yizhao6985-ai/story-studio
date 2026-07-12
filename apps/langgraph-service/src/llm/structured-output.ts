@@ -1,24 +1,35 @@
-import type { z } from "zod";
+import { ZodError, type z } from "zod";
 import { HumanMessage, SystemMessage } from "@langchain/core/messages";
 import type { BaseChatModel } from "@langchain/core/language_models/chat_models";
+import type { Runnable } from "@langchain/core/runnables";
+import type { BaseLanguageModelInput } from "@langchain/core/language_models/base";
 
-function extractJson(text: string): string {
-  const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
-  if (fenced?.[1]) return fenced[1].trim();
+import { withThinkingDisabled } from "../platform/llm.js";
 
-  const start = text.indexOf("{");
-  const end = text.lastIndexOf("}");
-  if (start >= 0 && end > start) {
-    return text.slice(start, end + 1);
-  }
+const INTERNAL_STREAM_TAGS = ["nostream"];
 
-  const arrayStart = text.indexOf("[");
-  const arrayEnd = text.lastIndexOf("]");
-  if (arrayStart >= 0 && arrayEnd > arrayStart) {
-    return text.slice(arrayStart, arrayEnd + 1);
-  }
+const DEFAULT_SYSTEM_HINT =
+  "你是 Story Studio 结构化输出助手。严格按 schema 输出，不要额外解释。";
 
-  return text.trim();
+export type StructuredOutputOptions = {
+  /** Function calling 工具名，便于 LangSmith 追踪 */
+  name?: string;
+};
+
+function buildMessages(
+  systemHint: string,
+  prompt: string,
+): [SystemMessage, HumanMessage] {
+  return [new SystemMessage(systemHint), new HumanMessage(prompt)];
+}
+
+async function invokeAndNormalize<TSchema extends z.ZodTypeAny>(
+  structuredModel: Runnable<BaseLanguageModelInput, unknown>,
+  messages: [SystemMessage, HumanMessage],
+  schema: TSchema,
+): Promise<z.infer<TSchema>> {
+  const raw = await structuredModel.invoke(messages);
+  return schema.parse(raw);
 }
 
 export async function generateStructuredOutput<TSchema extends z.ZodTypeAny>(
@@ -26,32 +37,32 @@ export async function generateStructuredOutput<TSchema extends z.ZodTypeAny>(
   prompt: string,
   schema: TSchema,
   systemHint?: string,
+  options?: StructuredOutputOptions,
 ): Promise<z.infer<TSchema>> {
-  const response = await model.invoke([
-    new SystemMessage(
-      systemHint ??
-        "你是 Story Studio 结构化输出助手。只输出合法 JSON，不要 markdown 代码块，不要额外解释。",
-    ),
-    new HumanMessage(
-      `${prompt}\n\n请严格按以下 JSON Schema 输出：\n${JSON.stringify(schema._def, null, 2)}`,
-    ),
-  ]);
+  const system = systemHint ?? DEFAULT_SYSTEM_HINT;
+  // DeepSeek thinking 模式不支持强制 tool_choice，结构化输出前关闭 thinking。
+  const internalModel = withThinkingDisabled(model);
+  // DeepSeek 等非 GPT 模型会被 LangChain 默认推断为 jsonSchema（response_format），
+  // 但 OpenAI 兼容代理通常只支持 function calling，故显式指定工具模式。
+  const structuredModel = internalModel
+    .withStructuredOutput(schema, {
+      name: options?.name ?? "structured_output",
+      method: "functionCalling",
+    })
+    .withConfig({ tags: INTERNAL_STREAM_TAGS });
 
-  const text =
-    typeof response.content === "string"
-      ? response.content
-      : Array.isArray(response.content)
-        ? response.content
-            .map((part) =>
-              typeof part === "string"
-                ? part
-                : "text" in part
-                  ? String(part.text)
-                  : "",
-            )
-            .join("")
-        : String(response.content);
+  const messages = buildMessages(system, prompt);
 
-  const parsed = JSON.parse(extractJson(text));
-  return schema.parse(parsed);
+  try {
+    return await invokeAndNormalize(structuredModel, messages, schema);
+  } catch (error) {
+    if (!(error instanceof ZodError)) throw error;
+
+    const retryMessages = buildMessages(
+      system,
+      `${prompt}\n\n上次输出未通过校验：${JSON.stringify(error.errors)}\n请修正缺失或类型错误的字段后重新输出。`,
+    );
+
+    return invokeAndNormalize(structuredModel, retryMessages, schema);
+  }
 }

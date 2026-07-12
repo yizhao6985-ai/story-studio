@@ -99,6 +99,16 @@ export async function updateConversationTitle(
   await client.threads.update(threadId, { metadata });
 }
 
+export async function updateConversationMode(
+  threadId: string,
+  mode: AgentMode,
+): Promise<void> {
+  const client = await getLangGraphClient();
+  const thread = await client.threads.get(threadId);
+  const metadata = { ...(thread.metadata ?? {}), mode };
+  await client.threads.update(threadId, { metadata });
+}
+
 export async function deleteConversation(threadId: string): Promise<void> {
   const client = await getLangGraphClient();
   await client.threads.delete(threadId);

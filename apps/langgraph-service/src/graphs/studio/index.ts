@@ -1,6 +1,6 @@
 import { END, START, StateGraph } from "@langchain/langgraph";
 
-import { askLoopNode } from "./nodes/ask-loop.js";
+import { answerNode } from "./nodes/answer-node.js";
 import { editLoopNode } from "./nodes/edit-loop.js";
 import {
   advanceTaskNode,
@@ -10,6 +10,7 @@ import {
   routeDispatch,
 } from "./nodes/intent.js";
 import { clarifyNode, prepareTurnNode } from "./nodes/prepare.js";
+import { readLoopNode } from "./nodes/read-loop.js";
 import { summarizeNode } from "./nodes/summarize.js";
 import { StudioState } from "./state.js";
 
@@ -20,7 +21,8 @@ export function createStudioGraph() {
     .addNode("generate_tasks", generateTasksNode)
     .addNode("clarify", clarifyNode)
     .addNode("dispatch", () => ({}))
-    .addNode("ask_loop", askLoopNode)
+    .addNode("read_loop", readLoopNode)
+    .addNode("answer_node", answerNode)
     .addNode("edit_loop", editLoopNode)
     .addNode("advance", advanceTaskNode)
     .addNode("summarize", summarizeNode)
@@ -33,11 +35,13 @@ export function createStudioGraph() {
     })
     .addEdge("clarify", END)
     .addConditionalEdges("dispatch", routeDispatch, {
-      ask: "ask_loop",
+      read: "read_loop",
+      answer: "answer_node",
       edit: "edit_loop",
       summarize: "summarize",
     })
-    .addEdge("ask_loop", "advance")
+    .addEdge("read_loop", "advance")
+    .addEdge("answer_node", "advance")
     .addEdge("edit_loop", "advance")
     .addEdge("advance", "dispatch")
     .addEdge("summarize", END);

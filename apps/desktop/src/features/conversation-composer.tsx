@@ -1,10 +1,7 @@
 import { ArrowUp, Square } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import {
-  ComposerModeSelector,
-  cycleComposerMode,
-} from "@/features/composer-mode-selector";
+import { ComposerModeSelector, cycleComposerMode } from "@/features/composer-mode-selector";
 import { useAutoResizeTextarea } from "@/hooks/input/use-auto-resize-textarea";
 import type { ComposerMode } from "@/hooks/types";
 import { COMPOSER_TEXTAREA_CLASS } from "@/lib/composer-chrome";
@@ -15,7 +12,6 @@ type ConversationComposerProps = {
   onChange: (value: string) => void;
   mode: ComposerMode;
   onModeChange: (mode: ComposerMode) => void;
-  modeLocked?: boolean;
   onSend: () => void;
   onStop?: () => void;
   loading: boolean;
@@ -29,7 +25,6 @@ export function ConversationComposer({
   onChange,
   mode,
   onModeChange,
-  modeLocked = false,
   onSend,
   onStop,
   loading,
@@ -39,7 +34,7 @@ export function ConversationComposer({
 }: ConversationComposerProps) {
   const textareaRef = useAutoResizeTextarea({ value, minRows: 1, maxRows: 5 });
 
-  const modeSwitchDisabled = disabled || loading || modeLocked;
+  const modeSwitchDisabled = disabled;
 
   const cycleMode = () => {
     if (modeSwitchDisabled) return;
@@ -55,7 +50,7 @@ export function ConversationComposer({
   };
 
   return (
-    <div className="w-full space-y-2">
+    <div className="w-full space-y-2" data-composer-root>
       <div className="group w-full rounded-none border border-border bg-card transition-[border-color] duration-150 focus-within:border-foreground/20">
         <div className="flex items-end gap-1.5 px-2 py-1.5">
           <textarea
@@ -64,7 +59,7 @@ export function ConversationComposer({
             onChange={(event) => onChange(event.target.value)}
             placeholder={placeholder}
             rows={1}
-            disabled={disabled || loading}
+            disabled={disabled}
             className={cn(
               "block max-h-[120px] flex-1 resize-none border-none bg-transparent outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-50",
               COMPOSER_TEXTAREA_CLASS,
@@ -110,7 +105,6 @@ export function ConversationComposer({
           mode={mode}
           onModeChange={onModeChange}
           disabled={modeSwitchDisabled}
-          locked={modeLocked}
         />
       </div>
     </div>

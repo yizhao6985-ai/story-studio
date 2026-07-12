@@ -7,6 +7,7 @@ import {
   assistantIdForMode,
   deriveConversationTitle,
   discoverLangGraphApiUrl,
+  findNewWorkspaceMutations,
   getThreadMetadata,
   toDisplayMessages,
   updateConversationTitle,
@@ -17,7 +18,13 @@ type UseLangGraphChatOptions = {
   threadId: string | undefined;
   mode: AgentMode;
   onFinish?: () => void;
+  onWorkspaceMutated?: () => void;
   onError?: (error: Error) => void;
+};
+
+export type SendMessageOptions = {
+  workPath?: string;
+  threadId?: string;
 };
 
 export function useLangGraphChat({
@@ -25,11 +32,13 @@ export function useLangGraphChat({
   threadId,
   mode,
   onFinish,
+  onWorkspaceMutated,
   onError,
 }: UseLangGraphChatOptions) {
   const [apiUrl, setApiUrl] = useState<string | null>(null);
   const wasLoadingRef = useRef(false);
   const titleUpdatedRef = useRef<Set<string>>(new Set());
+  const processedMutationsRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     let cancelled = false;
@@ -48,7 +57,7 @@ export function useLangGraphChat({
   }, [onError]);
 
   const stream = useStream({
-    apiUrl: apiUrl ?? "http://127.0.0.1:2024",
+    apiUrl: apiUrl ?? "http://localhost:2024",
     assistantId: assistantIdForMode(mode),
     threadId: threadId && apiUrl ? threadId : undefined,
   });
@@ -63,11 +72,29 @@ export function useLangGraphChat({
   }, [stream.error, onError]);
 
   useEffect(() => {
+    processedMutationsRef.current.clear();
+  }, [threadId]);
+
+  useEffect(() => {
     if (wasLoadingRef.current && !stream.isLoading) {
       onFinish?.();
     }
     wasLoadingRef.current = stream.isLoading;
   }, [stream.isLoading, onFinish]);
+
+  useEffect(() => {
+    const messages = stream.messages ?? [];
+    const newlyMutated = findNewWorkspaceMutations(
+      messages,
+      processedMutationsRef.current,
+    );
+    if (newlyMutated.length === 0) return;
+
+    for (const toolCallId of newlyMutated) {
+      processedMutationsRef.current.add(toolCallId);
+    }
+    onWorkspaceMutated?.();
+  }, [stream.messages, onWorkspaceMutated]);
 
   const messages = useMemo(
     () => toDisplayMessages(stream.messages ?? []),
@@ -75,17 +102,19 @@ export function useLangGraphChat({
   );
 
   const sendMessage = useCallback(
-    async (text: string) => {
+    async (text: string, overrides?: SendMessageOptions) => {
       const trimmed = text.trim();
-      if (!trimmed || !workPath || !threadId) {
+      const effectiveWorkPath = overrides?.workPath ?? workPath;
+      const effectiveThreadId = overrides?.threadId ?? threadId;
+      if (!trimmed || !effectiveWorkPath || !effectiveThreadId) {
         throw new Error("MISSING_CONVERSATION");
       }
 
-      const metadata = await getThreadMetadata(threadId);
+      const metadata = await getThreadMetadata(effectiveThreadId);
       if (!metadata) {
         throw new Error("THREAD_METADATA_MISSING");
       }
-      if (metadata.workPath !== workPath) {
+      if (metadata.workPath !== effectiveWorkPath) {
         throw new Error("THREAD_WORKSPACE_MISMATCH");
       }
       if (metadata.mode !== mode) {
@@ -94,11 +123,11 @@ export function useLangGraphChat({
 
       if (
         metadata.title === "新对话" &&
-        !titleUpdatedRef.current.has(threadId)
+        !titleUpdatedRef.current.has(effectiveThreadId)
       ) {
-        titleUpdatedRef.current.add(threadId);
+        titleUpdatedRef.current.add(effectiveThreadId);
         await updateConversationTitle(
-          threadId,
+          effectiveThreadId,
           deriveConversationTitle(trimmed),
         );
       }
@@ -106,7 +135,8 @@ export function useLangGraphChat({
       await stream.submit(
         { messages: [new HumanMessage(trimmed)] },
         {
-          config: { configurable: { workPath, mode } },
+          threadId: effectiveThreadId,
+          config: { configurable: { workPath: effectiveWorkPath, mode } },
           onError: (error) => {
             onError?.(
               error instanceof Error ? error : new Error(String(error)),

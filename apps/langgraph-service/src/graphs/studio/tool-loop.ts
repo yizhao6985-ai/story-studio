@@ -24,16 +24,23 @@ function extractMessageText(content: unknown): string {
   return String(content ?? "");
 }
 
+/** ReAct agent: each tool round is agent + tools nodes, plus one final answer. */
+function agentRecursionLimit(maxToolRounds: number): number {
+  return maxToolRounds * 2 + 3;
+}
+
 export async function runToolLoop(input: {
   workPath: string;
   profile: McpToolProfile;
   systemPrompt: string;
   userPrompt: string;
-  maxSteps: number;
+  maxToolRounds: number;
   abortSignal?: AbortSignal;
 }): Promise<{ text: string; changedFiles: string[] }> {
-  const model = createChatModel();
-  const tools = await loadMcpTools(input.profile);
+  const model = createChatModel({ disableThinking: true }).withConfig({
+    tags: ["nostream"],
+  });
+  const tools = await loadMcpTools(input.profile, input.workPath);
   const agent = createReactAgent({
     llm: model,
     tools,
@@ -43,7 +50,7 @@ export async function runToolLoop(input: {
   const result = await agent.invoke(
     { messages: [new HumanMessage(input.userPrompt)] },
     {
-      recursionLimit: input.maxSteps,
+      recursionLimit: agentRecursionLimit(input.maxToolRounds),
       signal: input.abortSignal,
       configurable: { workPath: input.workPath },
     },

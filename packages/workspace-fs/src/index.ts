@@ -4,11 +4,12 @@ export {
   setWorkDisplayTitle,
   type WorkUserMeta,
 } from "./work-meta.ts";
-export { listWorkFileTree } from "./tree.ts";
+export { listWorkFileTree, listWorkTextFilePaths } from "./tree.ts";
 export {
   createWorkWorkspaceDirectory,
   createWorkWorkspaceFile,
   deleteWorkWorkspaceEntry,
+  getWorkFileRevision,
   readWorkWorkspaceFile,
   renameWorkWorkspaceEntry,
   writeWorkWorkspaceFile,

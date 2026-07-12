@@ -12,6 +12,7 @@ export {
   deleteConversation,
   getThreadMetadata,
   updateConversationTitle,
+  updateConversationMode,
   deriveConversationTitle,
   parseThreadMetadata,
   resetLangGraphClient,
@@ -20,5 +21,7 @@ export {
 export {
   toDisplayMessages,
   getMessageText,
+  findNewWorkspaceMutations,
+  WORKSPACE_MUTATING_TOOLS,
   type ChatDisplayMessage,
 } from "./messages";

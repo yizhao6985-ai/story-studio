@@ -59,7 +59,6 @@ export function AppShell() {
     activeConversationId,
     mode,
     setMode,
-    modeLocked,
     input,
     setInput,
     chatMessages,
@@ -154,7 +153,6 @@ export function AppShell() {
             onChange={setInput}
             mode={mode}
             onModeChange={setMode}
-            modeLocked={modeLocked}
             onSend={send}
             onStop={() => void stopChat()}
             loading={loading}

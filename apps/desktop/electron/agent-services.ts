@@ -28,6 +28,7 @@ import { getMcpAuthToken } from "./mcp/mcp-auth.js";
 import { MCP_PORT, probeMcpHealth } from "./mcp/workspace-mcp-server.js";
 
 const DEFAULT_LANGGRAPH_PORT = 2024;
+const DEFAULT_LANGGRAPH_HOST = "localhost";
 const LANGGRAPH_PROBE_TIMEOUT_MS = 90_000;
 
 export type AgentServiceStatus = {
@@ -41,7 +42,14 @@ let langgraphPort = DEFAULT_LANGGRAPH_PORT;
 
 function repoLanggraphServiceDir(): string {
   const electronDir = dirname(fileURLToPath(import.meta.url));
-  return resolve(electronDir, "../../../langgraph-service");
+  const candidates = [
+    resolve(electronDir, "../../langgraph-service"),
+    resolve(electronDir, "../../../apps/langgraph-service"),
+  ];
+  for (const dir of candidates) {
+    if (existsSync(join(dir, "langgraph.json"))) return dir;
+  }
+  return candidates[0];
 }
 
 function langgraphCliPath(serviceDir: string): string {
@@ -92,14 +100,14 @@ export async function startEmbeddedLangGraph(options: {
   mcpToken: string;
 }): Promise<string | null> {
   if (!shouldEmbedLangGraph()) {
-    langgraphApiUrl = `http://127.0.0.1:${DEFAULT_LANGGRAPH_PORT}`;
+    langgraphApiUrl = `http://${DEFAULT_LANGGRAPH_HOST}:${DEFAULT_LANGGRAPH_PORT}`;
     if (await waitForLangGraph(langgraphApiUrl)) {
       return langgraphApiUrl;
     }
     return null;
   }
 
-  langgraphApiUrl = `http://127.0.0.1:${DEFAULT_LANGGRAPH_PORT}`;
+  langgraphApiUrl = `http://${DEFAULT_LANGGRAPH_HOST}:${DEFAULT_LANGGRAPH_PORT}`;
   if (await probeLangGraph(langgraphApiUrl)) {
     return langgraphApiUrl;
   }
@@ -112,7 +120,7 @@ export async function startEmbeddedLangGraph(options: {
   const cli = langgraphCliPath(serviceDir);
   if (!existsSync(cli)) {
     console.warn("[story-studio] langgraph CLI not found; skipping embedded agent");
-    langgraphApiUrl = `http://127.0.0.1:${DEFAULT_LANGGRAPH_PORT}`;
+    langgraphApiUrl = `http://${DEFAULT_LANGGRAPH_HOST}:${DEFAULT_LANGGRAPH_PORT}`;
     return (await waitForLangGraph(langgraphApiUrl)) ? langgraphApiUrl : null;
   }
 
@@ -121,7 +129,7 @@ export async function startEmbeddedLangGraph(options: {
 
   const fileEnv = await loadLanggraphEnv(serviceDir);
   langgraphPort = DEFAULT_LANGGRAPH_PORT;
-  langgraphApiUrl = `http://127.0.0.1:${langgraphPort}`;
+  langgraphApiUrl = `http://${DEFAULT_LANGGRAPH_HOST}:${langgraphPort}`;
 
   const env: NodeJS.ProcessEnv = {
     ...process.env,
@@ -172,7 +180,7 @@ export function getLangGraphApiUrl(): string | null {
 export async function getAgentServiceStatus(): Promise<AgentServiceStatus> {
   const mcpUrl = `http://127.0.0.1:${MCP_PORT}`;
   const mcpOk = await probeMcpHealth();
-  const url = langgraphApiUrl ?? `http://127.0.0.1:${DEFAULT_LANGGRAPH_PORT}`;
+  const url = langgraphApiUrl ?? `http://${DEFAULT_LANGGRAPH_HOST}:${DEFAULT_LANGGRAPH_PORT}`;
   const langgraphOk = await probeLangGraph(url);
 
   return {

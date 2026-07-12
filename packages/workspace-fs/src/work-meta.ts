@@ -14,13 +14,17 @@ function metaPath(workPath: string): string {
   return join(workUserDataDir(getUserDataRoot(), workPath), "meta.json");
 }
 
-export async function readWorkUserMeta(workPath: string): Promise<WorkUserMeta> {
+export async function readWorkUserMeta(
+  workPath: string,
+): Promise<WorkUserMeta> {
   try {
     const raw = await readFile(metaPath(workPath), "utf8");
     const parsed = JSON.parse(raw) as Partial<WorkUserMeta>;
     return {
       displayTitle:
-        typeof parsed.displayTitle === "string" ? parsed.displayTitle : undefined,
+        typeof parsed.displayTitle === "string"
+          ? parsed.displayTitle
+          : undefined,
       revision: typeof parsed.revision === "number" ? parsed.revision : 0,
     };
   } catch {

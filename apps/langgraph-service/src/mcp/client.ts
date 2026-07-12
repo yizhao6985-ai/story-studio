@@ -81,9 +81,19 @@ function filterToolsByProfile(
   return tools.filter((tool) => allowed.has(tool.name));
 }
 
+function workPathHeaders(workPath: string): Record<string, string> {
+  return {
+    ...getMcpAuthHeaders(),
+    [WORK_PATH_HEADER]: workPath,
+  };
+}
+
 export async function loadMcpTools(
   profile: McpToolProfile,
+  workPath: string,
 ): Promise<StructuredToolInterface[]> {
-  const allTools = await getMcpClient().getTools();
+  const allTools = await getMcpClient().getTools([], {
+    headers: workPathHeaders(workPath),
+  });
   return filterToolsByProfile(allTools, profile);
 }
