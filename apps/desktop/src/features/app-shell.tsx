@@ -62,7 +62,9 @@ export function AppShell() {
     input,
     setInput,
     chatMessages,
-    chatStatus,
+    chatLoading,
+    chatStreamingMessageId,
+    chatShowTypingIndicator,
     stopChat,
     loading,
     showSettings,
@@ -132,7 +134,12 @@ export function AppShell() {
             </div>
           )}
           <div className="flex flex-col gap-4">
-            <ChatMessageList messages={chatMessages} status={chatStatus} />
+            <ChatMessageList
+              messages={chatMessages}
+              loading={chatLoading}
+              streamingMessageId={chatStreamingMessageId}
+              showTypingIndicator={chatShowTypingIndicator}
+            />
           </div>
           <div ref={messagesEndRef} />
         </div>

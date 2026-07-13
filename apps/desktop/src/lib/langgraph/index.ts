@@ -20,6 +20,7 @@ export {
 } from "./conversations";
 export {
   toDisplayMessages,
+  deriveChatStreamingState,
   getMessageText,
   findNewWorkspaceMutations,
   WORKSPACE_MUTATING_TOOLS,

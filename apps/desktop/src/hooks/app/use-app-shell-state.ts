@@ -1,3 +1,4 @@
+import { useEventListener } from "ahooks";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ConversationManifest, WorkSnapshot } from "@/lib/story";
 
@@ -117,8 +118,9 @@ export function useAppShellState() {
     messages,
     sendMessage,
     stop,
-    status,
     loading,
+    streamingMessageId,
+    showTypingIndicator,
     error: chatError,
   } = useLangGraphChat({
     workPath: activeWorkspace?.workPath,
@@ -366,18 +368,16 @@ export function useAppShellState() {
     setShowSettings(true);
   }, []);
 
-  useEffect(() => {
-    const handler = (event: Event) => {
+  useEventListener(
+    OPEN_SETTINGS_EVENT,
+    (event) => {
       const detail = (event as CustomEvent<OpenSettingsDetail>).detail;
       if (detail?.section) {
         setSettingsSectionId(detail.section);
       }
       setShowSettings(true);
-    };
-
-    window.addEventListener(OPEN_SETTINGS_EVENT, handler);
-    return () => window.removeEventListener(OPEN_SETTINGS_EVENT, handler);
-  }, []);
+    },
+  );
 
   useAppKeyboardShortcuts({
     showSettings,
@@ -501,7 +501,9 @@ export function useAppShellState() {
     input,
     setInput,
     chatMessages: messages,
-    chatStatus: status,
+    chatLoading: loading,
+    chatStreamingMessageId: streamingMessageId,
+    chatShowTypingIndicator: showTypingIndicator,
     loading,
     stopChat: stop,
     showSettings,

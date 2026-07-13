@@ -78,15 +78,19 @@ function normalizeEditorSettings(value: unknown): EditorSettings {
   };
 }
 
-export function readStoredEditorSettings(): EditorSettings {
+export function parseStoredEditorSettings(raw: string): EditorSettings {
   try {
-    const raw =
-      typeof localStorage !== "undefined" ? localStorage.getItem(STORAGE_KEY) : null;
-    if (!raw) return { ...DEFAULT_EDITOR_SETTINGS };
     return normalizeEditorSettings(JSON.parse(raw));
   } catch {
     return { ...DEFAULT_EDITOR_SETTINGS };
   }
+}
+
+export function readStoredEditorSettings(): EditorSettings {
+  const raw =
+    typeof localStorage !== "undefined" ? localStorage.getItem(STORAGE_KEY) : null;
+  if (!raw) return { ...DEFAULT_EDITOR_SETTINGS };
+  return parseStoredEditorSettings(raw);
 }
 
 export function writeStoredEditorSettings(settings: EditorSettings) {

@@ -1,5 +1,4 @@
 import type { WorkspaceEntry } from "@/lib/story";
-import { README_FILE } from "@/lib/story/constants";
 
 export function findWorkspaceEntry(
   entries: WorkspaceEntry[],
@@ -25,10 +24,6 @@ export function collectPaths(entries: WorkspaceEntry[]): string[] {
 }
 
 export function pickDefaultFile(entries: WorkspaceEntry[]): string | null {
-  if (findWorkspaceEntry(entries, README_FILE)?.kind === "file") {
-    return README_FILE;
-  }
-
   return (
     collectPaths(entries).find((path) => {
       const entry = findWorkspaceEntry(entries, path);

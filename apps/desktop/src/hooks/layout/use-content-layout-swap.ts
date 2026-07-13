@@ -1,36 +1,23 @@
-import { useCallback, useState } from "react";
+import { useLocalStorageState, useMemoizedFn } from "ahooks";
 
 const STORAGE_KEY = "storyStudio.contentLayoutSwapped";
 
-function readContentLayoutSwapped(): boolean {
-  try {
-    return localStorage.getItem(STORAGE_KEY) === "1";
-  } catch {
-    return false;
-  }
-}
-
-function saveContentLayoutSwapped(swapped: boolean) {
-  try {
-    localStorage.setItem(STORAGE_KEY, swapped ? "1" : "0");
-  } catch {
-    // ignore quota / private mode errors
-  }
-}
-
 export function useContentLayoutSwap() {
-  const [contentLayoutSwapped, setContentLayoutSwapped] = useState(readContentLayoutSwapped);
+  const [contentLayoutSwapped, setContentLayoutSwapped] = useLocalStorageState(
+    STORAGE_KEY,
+    {
+      defaultValue: false,
+      deserializer: (raw) => raw === "1",
+      serializer: (value) => (value ? "1" : "0"),
+    },
+  );
 
-  const toggleContentLayout = useCallback(() => {
-    setContentLayoutSwapped((prev) => {
-      const next = !prev;
-      saveContentLayoutSwapped(next);
-      return next;
-    });
-  }, []);
+  const toggleContentLayout = useMemoizedFn(() => {
+    setContentLayoutSwapped((prev) => !prev);
+  });
 
   return {
-    contentLayoutSwapped,
+    contentLayoutSwapped: contentLayoutSwapped ?? false,
     toggleContentLayout,
   };
 }

@@ -98,15 +98,15 @@ export function routeAfterGenerate(state: StudioGraphState): "clarify" | "dispat
 
 export function routeDispatch(
   state: StudioGraphState,
-): "read" | "answer" | "edit" | "summarize" {
+): "read" | "respond" | "edit" {
   const task = state.taskQueue[state.taskIndex];
-  if (!task) return "summarize";
+  if (!task) return "respond";
 
   switch (task.type) {
     case "read":
       return "read";
     case "answer":
-      return "answer";
+      return "respond";
     case "create":
     case "edit":
     case "delete":

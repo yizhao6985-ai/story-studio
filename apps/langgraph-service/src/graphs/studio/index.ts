@@ -1,6 +1,5 @@
 import { END, START, StateGraph } from "@langchain/langgraph";
 
-import { answerNode } from "./nodes/answer-node.js";
 import { editLoopNode } from "./nodes/edit-loop.js";
 import {
   advanceTaskNode,
@@ -11,7 +10,7 @@ import {
 } from "./nodes/intent.js";
 import { clarifyNode, prepareTurnNode } from "./nodes/prepare.js";
 import { readLoopNode } from "./nodes/read-loop.js";
-import { summarizeNode } from "./nodes/summarize.js";
+import { respondNode } from "./nodes/respond-node.js";
 import { StudioState } from "./state.js";
 
 export function createStudioGraph() {
@@ -22,10 +21,9 @@ export function createStudioGraph() {
     .addNode("clarify", clarifyNode)
     .addNode("dispatch", () => ({}))
     .addNode("read_loop", readLoopNode)
-    .addNode("answer_node", answerNode)
     .addNode("edit_loop", editLoopNode)
     .addNode("advance", advanceTaskNode)
-    .addNode("summarize", summarizeNode)
+    .addNode("respond", respondNode)
     .addEdge(START, "prepare")
     .addEdge("prepare", "analyze_intent")
     .addEdge("analyze_intent", "generate_tasks")
@@ -36,15 +34,13 @@ export function createStudioGraph() {
     .addEdge("clarify", END)
     .addConditionalEdges("dispatch", routeDispatch, {
       read: "read_loop",
-      answer: "answer_node",
+      respond: "respond",
       edit: "edit_loop",
-      summarize: "summarize",
     })
     .addEdge("read_loop", "advance")
-    .addEdge("answer_node", "advance")
     .addEdge("edit_loop", "advance")
     .addEdge("advance", "dispatch")
-    .addEdge("summarize", END);
+    .addEdge("respond", END);
 
-  return graph.compile();
+  return graph.compile().withConfig({ recursionLimit: 100 });
 }

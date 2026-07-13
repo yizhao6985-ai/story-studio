@@ -1,3 +1,4 @@
+import { useEventListener, useLatest, useSize } from "ahooks";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { WorkspaceEntry } from "@/lib/story";
@@ -13,6 +14,7 @@ import { Tree, type NodeApi, type NodeRendererProps, type TreeApi } from "react-
 
 import { isProtectedWorkspacePath } from "@/lib/story/protected-paths";
 import { findWorkspaceEntry } from "@/lib/workspace-tree-utils";
+import { useOverlayDismiss } from "@/hooks/lib/use-overlay-dismiss";
 import { cn } from "@/lib/utils";
 import { formatShortcut, matchesShortcut } from "@/lib/keyboard-shortcuts";
 
@@ -236,7 +238,8 @@ export function WorkspaceFileTree({
   const containerRef = useRef<HTMLDivElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const treeRef = useRef<TreeApi<WorkspaceTreeNode>>(null);
-  const [height, setHeight] = useState(240);
+  const containerSize = useSize(containerRef);
+  const height = Math.max(120, containerSize?.height ?? 240);
   const [treeError, setTreeError] = useState("");
   const [contextMenu, setContextMenu] = useState<TreeContextMenu | null>(null);
   const [menuCoords, setMenuCoords] = useState({ x: 0, y: 0 });
@@ -244,44 +247,12 @@ export function WorkspaceFileTree({
   const treeData = useMemo(() => entriesToTreeData(entries), [entries]);
 
   useEffect(() => {
-    const element = containerRef.current;
-    if (!element) return;
-    const observer = new ResizeObserver(([entry]) => {
-      setHeight(Math.max(120, entry.contentRect.height));
-    });
-    observer.observe(element);
-    return () => observer.disconnect();
-  }, []);
-
-  useEffect(() => {
     if (!selectedPath || !treeRef.current) return;
     treeRef.current.select(selectedPath);
     treeRef.current.openParents(selectedPath);
   }, [selectedPath, treeData]);
 
-  useEffect(() => {
-    if (!contextMenu) return;
-
-    const close = () => setContextMenu(null);
-    const onPointerDown = (event: PointerEvent) => {
-      if (menuRef.current?.contains(event.target as Node)) return;
-      close();
-    };
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") close();
-    };
-
-    window.addEventListener("pointerdown", onPointerDown);
-    window.addEventListener("keydown", onKeyDown);
-    window.addEventListener("scroll", close, true);
-    window.addEventListener("resize", close);
-    return () => {
-      window.removeEventListener("pointerdown", onPointerDown);
-      window.removeEventListener("keydown", onKeyDown);
-      window.removeEventListener("scroll", close, true);
-      window.removeEventListener("resize", close);
-    };
-  }, [contextMenu]);
+  useOverlayDismiss(Boolean(contextMenu), menuRef, () => setContextMenu(null));
 
   useLayoutEffect(() => {
     if (!contextMenu || !menuRef.current) return;
@@ -331,36 +302,33 @@ export function WorkspaceFileTree({
     [onMutated, workPath],
   );
 
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      const container = containerRef.current;
-      if (!container?.contains(document.activeElement)) return;
-      if (treeRef.current?.isEditing) return;
+  const deleteEntriesRef = useLatest(deleteEntries);
 
-      const isDeleteShortcut =
-        matchesShortcut(event, ["mod", "Backspace"]) ||
-        matchesShortcut(event, ["mod", "Delete"]);
-      if (!isDeleteShortcut) return;
+  useEventListener("keydown", (event) => {
+    const container = containerRef.current;
+    if (!container?.contains(document.activeElement)) return;
+    if (treeRef.current?.isEditing) return;
 
-      event.preventDefault();
+    const isDeleteShortcut =
+      matchesShortcut(event, ["mod", "Backspace"]) ||
+      matchesShortcut(event, ["mod", "Delete"]);
+    if (!isDeleteShortcut) return;
 
-      const tree = treeRef.current;
-      if (!tree) return;
+    event.preventDefault();
 
-      const ids =
-        tree.selectedIds.size > 0
-          ? Array.from(tree.selectedIds)
-          : tree.focusedNode
-            ? [tree.focusedNode.id]
-            : [];
-      if (ids.length === 0) return;
+    const tree = treeRef.current;
+    if (!tree) return;
 
-      void deleteEntries(ids);
-    };
+    const ids =
+      tree.selectedIds.size > 0
+        ? Array.from(tree.selectedIds)
+        : tree.focusedNode
+          ? [tree.focusedNode.id]
+          : [];
+    if (ids.length === 0) return;
 
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [deleteEntries]);
+    void deleteEntriesRef.current(ids);
+  });
 
   const resolveCreateParentId = useCallback((): string | null => {
     const tree = treeRef.current;

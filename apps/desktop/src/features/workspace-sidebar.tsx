@@ -1,8 +1,9 @@
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import type { ConversationManifest } from "@/lib/story";
 import { ChevronDown, ChevronRight, Folder, Plus, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { useOverlayDismiss } from "@/hooks/lib/use-overlay-dismiss";
 import { cn } from "@/lib/utils";
 
 export type WorkspaceSidebarEntry = {
@@ -48,32 +49,7 @@ export function WorkspaceSidebar({
   const [contextMenu, setContextMenu] = useState<WorkspaceContextMenuState | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    if (!contextMenu) return;
-
-    const close = () => setContextMenu(null);
-
-    const onPointerDown = (event: PointerEvent) => {
-      if (menuRef.current?.contains(event.target as Node)) return;
-      close();
-    };
-
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") close();
-    };
-
-    window.addEventListener("pointerdown", onPointerDown);
-    window.addEventListener("keydown", onKeyDown);
-    window.addEventListener("scroll", close, true);
-    window.addEventListener("resize", close);
-
-    return () => {
-      window.removeEventListener("pointerdown", onPointerDown);
-      window.removeEventListener("keydown", onKeyDown);
-      window.removeEventListener("scroll", close, true);
-      window.removeEventListener("resize", close);
-    };
-  }, [contextMenu]);
+  useOverlayDismiss(Boolean(contextMenu), menuRef, () => setContextMenu(null));
 
   const openContextMenu = (
     event: React.MouseEvent,

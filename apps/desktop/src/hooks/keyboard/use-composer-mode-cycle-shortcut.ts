@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEventListener, useLatest } from "ahooks";
 
 import { cycleComposerMode } from "@/features/composer-mode-selector";
 import type { ComposerMode } from "@/hooks/types";
@@ -32,25 +32,19 @@ export function useComposerModeCycleShortcut({
   onModeChange,
   disabled = false,
 }: UseComposerModeCycleShortcutOptions) {
-  const modeRef = useRef(mode);
-  const onModeChangeRef = useRef(onModeChange);
+  const modeRef = useLatest(mode);
+  const onModeChangeRef = useLatest(onModeChange);
 
-  modeRef.current = mode;
-  onModeChangeRef.current = onModeChange;
-
-  useEffect(() => {
-    if (disabled) return;
-
-    const onKeyDown = (event: KeyboardEvent) => {
+  useEventListener(
+    "keydown",
+    (event) => {
       if (!isModeCycleShortcut(event)) return;
       if (isExternalTextInput(event.target)) return;
 
       event.preventDefault();
       event.stopPropagation();
       cycleComposerMode(modeRef.current, onModeChangeRef.current);
-    };
-
-    window.addEventListener("keydown", onKeyDown, true);
-    return () => window.removeEventListener("keydown", onKeyDown, true);
-  }, [disabled]);
+    },
+    { enable: !disabled, capture: true },
+  );
 }

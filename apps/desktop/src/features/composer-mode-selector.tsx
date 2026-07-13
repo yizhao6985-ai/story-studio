@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from "react";
+import { useClickAway } from "ahooks";
+import { useRef, useState } from "react";
 import { ChevronDown } from "lucide-react";
 
 import type { ComposerMode } from "@/hooks/types";
@@ -49,18 +50,7 @@ export function ComposerModeSelector({
   const [modeMenuOpen, setModeMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    if (!modeMenuOpen) return;
-
-    const onPointerDown = (event: MouseEvent) => {
-      if (!menuRef.current?.contains(event.target as Node)) {
-        setModeMenuOpen(false);
-      }
-    };
-
-    window.addEventListener("pointerdown", onPointerDown);
-    return () => window.removeEventListener("pointerdown", onPointerDown);
-  }, [modeMenuOpen]);
+  useClickAway(() => setModeMenuOpen(false), menuRef);
 
   const activeMode = COMPOSER_MODE_OPTIONS.find((item) => item.id === mode)!;
 

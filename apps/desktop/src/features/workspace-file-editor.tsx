@@ -1,6 +1,7 @@
+import { useEventListener } from "ahooks";
 import Editor from "@monaco-editor/react";
 import { Loader2, X } from "lucide-react";
-import { useEffect, useMemo } from "react";
+import { useMemo } from "react";
 
 import {
   defineStoryStudioMonacoThemes,
@@ -57,16 +58,12 @@ export function WorkspaceFileEditor({
   const textStats = useMemo(() => computeTextStats(value), [value]);
   const showStatusBar = Boolean(path && readable && !loading);
 
-  useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if ((event.metaKey || event.ctrlKey) && event.key === "s") {
-        event.preventDefault();
-        if (dirty && readable && path && !saving) onSave();
-      }
-    };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [dirty, readable, path, saving, onSave]);
+  useEventListener("keydown", (event) => {
+    if ((event.metaKey || event.ctrlKey) && event.key === "s") {
+      event.preventDefault();
+      if (dirty && readable && path && !saving) onSave();
+    }
+  });
 
   if (openTabs.length === 0 && !path) {
     return (

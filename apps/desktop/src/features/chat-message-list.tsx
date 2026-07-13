@@ -5,7 +5,9 @@ import { Wrench } from "lucide-react";
 
 type ChatMessageListProps = {
   messages: ChatDisplayMessage[];
-  status: string;
+  loading: boolean;
+  streamingMessageId?: string;
+  showTypingIndicator?: boolean;
 };
 
 function TextMessagePart({ text }: { text: string }) {
@@ -79,23 +81,22 @@ function TypingIndicator() {
   );
 }
 
-export function ChatMessageList({ messages, status }: ChatMessageListProps) {
-  const isStreaming = status === "streaming" || status === "submitted";
+export function ChatMessageList({
+  messages,
+  loading,
+  streamingMessageId,
+  showTypingIndicator = false,
+}: ChatMessageListProps) {
   const lastMessage = messages.at(-1);
-  const lastIsStreamingAssistant =
-    isStreaming && lastMessage?.role === "assistant";
   const lastIsRunningTool =
     lastMessage?.role === "tool" && lastMessage.status === "running";
-  const showTypingIndicator =
-    isStreaming && !lastIsStreamingAssistant && !lastIsRunningTool;
+  const showTyping = showTypingIndicator && !lastIsRunningTool;
 
   return (
     <>
-      {messages.map((message, index) => {
+      {messages.map((message) => {
         const streaming =
-          isStreaming &&
-          index === messages.length - 1 &&
-          message.role === "assistant";
+          loading && message.role === "assistant" && message.id === streamingMessageId;
 
         if (message.role === "user") {
           return <UserMessageBubble key={message.id} message={message} />;
@@ -117,7 +118,7 @@ export function ChatMessageList({ messages, status }: ChatMessageListProps) {
 
         return null;
       })}
-      {showTypingIndicator ? <TypingIndicator /> : null}
+      {showTyping ? <TypingIndicator /> : null}
     </>
   );
 }

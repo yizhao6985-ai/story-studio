@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useAsyncEffect } from "ahooks";
+import { useCallback, useMemo, useState } from "react";
 import type { WorkManifest, WorkSnapshot } from "@/lib/story";
 
 import type { WorkspaceEntry } from "@/hooks/types";
@@ -36,61 +37,42 @@ export function useSidebarWorkspaces(activeWorkspace: WorkSnapshot | null) {
   const [expandedWorkPaths, setExpandedWorkPaths] = useState<Set<string>>(() => new Set());
   const [workspaceRegistryLoaded, setWorkspaceRegistryLoaded] = useState(false);
 
-  useEffect(() => {
-    let cancelled = false;
-
-    void (async () => {
-      const paths = await window.storyStudio.library.listWorks();
-      if (cancelled) return;
-
-      setWorkspaceRegistryLoaded(true);
-      setSidebarWorkspacePaths(paths);
-    })();
-
-    return () => {
-      cancelled = true;
-    };
+  useAsyncEffect(async () => {
+    const paths = await window.storyStudio.library.listWorks();
+    setWorkspaceRegistryLoaded(true);
+    setSidebarWorkspacePaths(paths);
   }, []);
 
-  useEffect(() => {
+  useAsyncEffect(async () => {
     if (!workspaceRegistryLoaded) return;
 
-    let cancelled = false;
     const paths = sidebarWorkspacePaths;
     if (paths.length === 0) return;
 
-    void (async () => {
-      const loaded = await Promise.all(
-        paths.map(async (workPath) => {
-          try {
-            const snap = await window.storyStudio.library.openWork(workPath);
-            return [workPath, snap.manifest] as const;
-          } catch {
-            return null;
-          }
-        }),
-      );
-
-      if (cancelled) return;
-
-      setManifestByPath((prev) => {
-        const next = { ...prev };
-        let changed = false;
-        for (const item of loaded) {
-          if (!item) continue;
-          const [workPath, manifest] = item;
-          if (next[workPath]?.title !== manifest.title || !(workPath in next)) {
-            next[workPath] = manifest;
-            changed = true;
-          }
+    const loaded = await Promise.all(
+      paths.map(async (workPath) => {
+        try {
+          const snap = await window.storyStudio.library.openWork(workPath);
+          return [workPath, snap.manifest] as const;
+        } catch {
+          return null;
         }
-        return changed ? next : prev;
-      });
-    })();
+      }),
+    );
 
-    return () => {
-      cancelled = true;
-    };
+    setManifestByPath((prev) => {
+      const next = { ...prev };
+      let changed = false;
+      for (const item of loaded) {
+        if (!item) continue;
+        const [workPath, manifest] = item;
+        if (next[workPath]?.title !== manifest.title || !(workPath in next)) {
+          next[workPath] = manifest;
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
   }, [sidebarWorkspacePaths, workspaceRegistryLoaded]);
 
   const workspaceEntries = useMemo(

@@ -90,32 +90,6 @@ ${context}
 优先使用上方作品上下文；仅在 scope 内需要精确原文时再调用 read_file。输出结构化的阅读摘要。`;
 }
 
-export function formatAnswerTaskPrompt(
-  task: SubTask,
-  priorResults: TaskResult[],
-  projectContext?: RelevantContext,
-): string {
-  const context =
-    priorResults.length > 0
-      ? priorResults
-          .map(
-            (result) =>
-              `[${result.task.type}] ${result.task.goal}\n${result.output.slice(0, 1500)}`,
-          )
-          .join("\n\n")
-      : "（无）";
-
-  return `${formatWorkContextBlock(projectContext)}
-
-【Answer 子任务】
-目标：${task.goal}
-
-【已完成子任务上下文】
-${context}
-
-请基于作品上下文与以上子任务结果，用简洁中文回答。不要调用工具。`;
-}
-
 export function formatEditTaskPrompt(
   task: SubTask,
   priorResults: TaskResult[],
@@ -157,7 +131,7 @@ ${context}
 作品上下文与阅读结果已在上方提供，直接执行变更操作，完成后自检并简要说明改动。`;
 }
 
-export function formatSummarizePrompt(
+export function formatRespondPrompt(
   userMessage: string,
   intentSummary: string,
   results: TaskResult[],

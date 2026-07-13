@@ -1,3 +1,4 @@
+import { useEventListener } from "ahooks";
 import { useEffect, useRef, useState } from "react";
 import { ArrowUp, Loader2 } from "lucide-react";
 
@@ -71,13 +72,9 @@ export function CreateConversationComposer({
     onWorkspaceChange?.(workPath);
   }, [workPath, onWorkspaceChange]);
 
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onCancel();
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [onCancel]);
+  useEventListener("keydown", (event) => {
+    if (event.key === "Escape") onCancel();
+  });
 
   const canCreate = workspaces.some((item) => item.workPath === workPath);
   const placeholder = !canCreate

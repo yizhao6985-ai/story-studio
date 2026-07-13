@@ -1,5 +1,6 @@
 import { HumanMessage } from "@langchain/core/messages";
 import { useStream } from "@langchain/react";
+import { useAsyncEffect } from "ahooks";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type { AgentMode } from "@/hooks/types";
@@ -7,6 +8,7 @@ import {
   assistantIdForMode,
   deriveConversationTitle,
   discoverLangGraphApiUrl,
+  deriveChatStreamingState,
   findNewWorkspaceMutations,
   getThreadMetadata,
   toDisplayMessages,
@@ -40,20 +42,13 @@ export function useLangGraphChat({
   const titleUpdatedRef = useRef<Set<string>>(new Set());
   const processedMutationsRef = useRef<Set<string>>(new Set());
 
-  useEffect(() => {
-    let cancelled = false;
-    void discoverLangGraphApiUrl()
-      .then((url) => {
-        if (!cancelled) setApiUrl(url);
-      })
-      .catch((error) => {
-        if (!cancelled) {
-          onError?.(error instanceof Error ? error : new Error(String(error)));
-        }
-      });
-    return () => {
-      cancelled = true;
-    };
+  useAsyncEffect(async () => {
+    try {
+      const url = await discoverLangGraphApiUrl();
+      setApiUrl(url);
+    } catch (error) {
+      onError?.(error instanceof Error ? error : new Error(String(error)));
+    }
   }, [onError]);
 
   const stream = useStream({
@@ -99,6 +94,11 @@ export function useLangGraphChat({
   const messages = useMemo(
     () => toDisplayMessages(stream.messages ?? []),
     [stream.messages],
+  );
+
+  const { streamingMessageId, showTypingIndicator } = useMemo(
+    () => deriveChatStreamingState(stream.messages ?? [], stream.isLoading),
+    [stream.messages, stream.isLoading],
   );
 
   const sendMessage = useCallback(
@@ -149,14 +149,14 @@ export function useLangGraphChat({
   );
 
   const loading = stream.isLoading;
-  const status = loading ? "streaming" : "ready";
 
   return {
     messages,
     sendMessage,
     stop: stream.stop.bind(stream),
     loading,
-    status,
+    streamingMessageId,
+    showTypingIndicator,
     error: stream.error,
   };
 }

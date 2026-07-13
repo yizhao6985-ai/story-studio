@@ -39,6 +39,48 @@ function isInternalStructuredPayload(text: string): boolean {
   );
 }
 
+function messageStableId(message: BaseMessage, index: number): string {
+  if (message.id) return message.id;
+  if (ToolMessage.isInstance(message) && message.tool_call_id) {
+    return message.tool_call_id;
+  }
+  if (AIMessage.isInstance(message)) return `assistant-${index}`;
+  if (HumanMessage.isInstance(message)) return `user-${index}`;
+  if (ToolMessage.isInstance(message)) return `tool-${index}`;
+  return `msg-${index}`;
+}
+
+export function deriveChatStreamingState(
+  messages: BaseMessage[],
+  isLoading: boolean,
+): { streamingMessageId: string | undefined; showTypingIndicator: boolean } {
+  if (!isLoading) {
+    return { streamingMessageId: undefined, showTypingIndicator: false };
+  }
+
+  const lastIndex = messages.length - 1;
+  const last = messages.at(-1);
+  if (!last) {
+    return { streamingMessageId: undefined, showTypingIndicator: true };
+  }
+
+  if (AIMessage.isInstance(last)) {
+    if (last.tool_calls?.length) {
+      return { streamingMessageId: undefined, showTypingIndicator: false };
+    }
+    return {
+      streamingMessageId: messageStableId(last, lastIndex),
+      showTypingIndicator: false,
+    };
+  }
+
+  if (HumanMessage.isInstance(last)) {
+    return { streamingMessageId: undefined, showTypingIndicator: true };
+  }
+
+  return { streamingMessageId: undefined, showTypingIndicator: true };
+}
+
 function summarizeToolArgs(args: unknown): string {
   if (!args || typeof args !== "object") return "";
   const record = args as Record<string, unknown>;
@@ -56,7 +98,8 @@ export function toDisplayMessages(messages: BaseMessage[]): ChatDisplayMessage[]
   const result: ChatDisplayMessage[] = [];
   const pendingToolCalls = new Map<string, { name: string; args: unknown }>();
 
-  for (const message of messages) {
+  for (let index = 0; index < messages.length; index += 1) {
+    const message = messages[index]!;
     if (AIMessage.isInstance(message) && message.tool_calls?.length) {
       for (const call of message.tool_calls) {
         if (!call.id) continue;
@@ -82,7 +125,7 @@ export function toDisplayMessages(messages: BaseMessage[]): ChatDisplayMessage[]
         : undefined;
       const content = messageContentToText(message.content).trim();
       result.push({
-        id: message.id ?? message.tool_call_id ?? crypto.randomUUID(),
+        id: messageStableId(message, index),
         role: "tool",
         toolName: pending?.name ?? "tool",
         content: content.slice(0, 500) || "完成",
@@ -96,7 +139,7 @@ export function toDisplayMessages(messages: BaseMessage[]): ChatDisplayMessage[]
 
     if (HumanMessage.isInstance(message)) {
       result.push({
-        id: message.id ?? crypto.randomUUID(),
+        id: messageStableId(message, index),
         role: "user",
         content,
       });
@@ -107,7 +150,7 @@ export function toDisplayMessages(messages: BaseMessage[]): ChatDisplayMessage[]
       if (isInternalStructuredPayload(content)) continue;
 
       result.push({
-        id: message.id ?? crypto.randomUUID(),
+        id: messageStableId(message, index),
         role: "assistant",
         content,
       });
